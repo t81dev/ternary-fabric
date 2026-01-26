@@ -6,39 +6,45 @@ Thank you for your interest in advancing ternary-native computing! This project 
 
 All contributions must adhere to the **Binary Sovereignty** principle:
 
-* Binary hosts control and schedule (the "Brain").
-* Ternary planes store and transform (the "Muscle").
-* Communication MUST occur via **Ternary Frame Descriptors (TFDs)**.
+* **Binary Hosts:** Control, schedule, and allocate (The "Brain").
+* **Ternary Planes:** Store, hydrate, and transform (The "Muscle").
+* **Interface:** Communication MUST occur via **Ternary Frame Descriptors (TFDs)** as defined in `tfmbs.h`.
 
-## 2. Software Contributions (C / Python)
+## 2. Software & Tooling (C / Python)
 
-We are currently building the emulation and tooling suite.
+* **ABI Consistency:** Any changes to data structures must begin in `include/tfmbs.h`. We use C99 for headers to ensure compatibility with embedded SOC toolchains.
+* **Golden Reference:** New kernels (e.g., T-FFT, Conv2D) must first be implemented as a Python reference script in `tools/`. This serves as the "Golden Model" for hardware verification.
+* **Python Bindings:** New hardware features must be exposed via the `pytfmbs` C-extension to ensure accessibility for AI researchers.
 
-* **Code Style:** Use C99 for headers and source to ensure maximum portability across embedded toolchains.
-* **Header-First:** Any new feature (e.g., a new packing format) must be defined in `include/tfmbs.h` before implementation.
-* **Testing:** Every new kernel or codec must include a Python reference script in `tools/` to verify mathematical correctness before it is optimized in C.
+## 3. Hardware RTL (Verilog)
 
-## 3. Hardware Contributions (Verilog / SystemVerilog)
+As we move into Phase 3 (FPGA/ASIC), hardware contributions must prioritize efficiency:
 
-We are moving toward FPGA-ready RTL.
+* **SIMD Modularity:** Design components at the **Lane** level. Logic should be tileable to allow the `vector_engine` to scale from 1 to 256+ lanes.
+* **Zero-Skip Enforcement:** RTL must implement operand isolation or clock gating for `00` (zero) trits. Contributions that do not demonstrate power-saving potential on sparse data will be rejected.
+* **PT-5 Compliance:** All data ingestors must use the `pt5_unpacker` hydration logic to maintain 95% bus efficiency.
 
-* **Modularity:** Design components at the "Lane" level. A lane should be an independent unit that can be tiled to satisfy the `lane_count` in a TFD.
-* **Balanced Logic:** Use symmetric representations. Ensure that your ALU treats `-1` and `+1` with equal latency and power profiles.
-* **Interconnects:** Aim for AXI4-Lite for the control plane (TFD submission) and AXI4-Stream for the data plane (Trit streaming).
+## 4. Kernel Development Workflow
 
-## 4. Proposing New Specs
+To add a new mathematical operation to the fabric:
 
-If you wish to add a new normative specification (e.g., `NETWORK_FABRIC.md`):
+1. **Register a Kernel ID:** Add the new ID to the `tfmbs_kernel_t` enum in `tfmbs.h`.
+2. **Update the Engine:** Modify `src/hw/vector_engine.v` to handle the new `op_mode`.
+3. **Validate Parity:** Update the `make run_sim` testbench to compare the Verilog output against your Python Golden Model.
 
-1. Open an Issue titled `[PROPOSAL] <Spec Name>`.
-2. Ensure the spec defines a **Normative** level and a **Fallback** path.
-3. Once the community agrees, submit a PR adding the `.md` file to the `specs/` directory.
+## 5. Submitting Changes
 
-## 5. Development Workflow
-
-1. **Fork** the repository.
-2. **Create a Feature Branch** (`git checkout -b feature/ternary-alu`).
-3. **Validate:** Run `./test_suite.sh` to ensure no regressions in the reference logic.
-4. **Submit a Pull Request:** Link the PR to the relevant phase in `roadmap.md`.
+1. **Fork** and **Branch** (`feature/your-feature`).
+2. **Regression Check:** Run `make all && ./test_suite.sh`.
+3. **Hardware Check:** Ensure `make run_sim` passes with 0 errors.
+4. **PR:** Link your pull request to the relevant phase in `ROADMAP.md`.
 
 ---
+
+### Project Handover Complete
+
+The **ternary-fabric** repository is now a high-velocity, full-stack development environment.
+
+* **Software** can model and quantize.
+* **Hardware** can hydrate and execute.
+* **ABI** can bridge and govern.
