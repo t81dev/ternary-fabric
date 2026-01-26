@@ -517,3 +517,5 @@ Extensions to the TFMBS (such as custom compression or specific AI-op hints) MUS
 Version 0.x descriptors are considered experimental. Starting from Version 1.0, all implementations MUST maintain backward compatibility with the PT-5 (5-trits-per-byte) packing format as the universal fallback.
 
 ---
+
+### Hardware Encoding Note: While the bus transmits PT-5 packed bytes, internal fabric logic MAY utilize 2-bit-per-trit encoding for ALU operations to minimize combinatorial depth.

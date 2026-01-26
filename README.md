@@ -1,8 +1,8 @@
-## ternary-fabric
+### ternary-fabric
 
 This repository defines a **ternary-native memory and interconnect fabric** designed to accelerate compression, signal processing, and AI workloads within binary-dominated systems.
 
-Unlike traditional research that seeks to replace binary CPUs, this fabric operates as a **specialized data plane** (execution adjacency) attached to a binary host, utilizing balanced-ternary semantics  to eliminate multiplication overhead and enable zero-skip hardware optimizations.
+Unlike traditional research that seeks to replace binary CPUs, this fabric operates as a **specialized data plane** (execution adjacency) attached to a binary host, utilizing balanced-ternary semantics () to eliminate multiplication overhead and enable **Zero-Skip** hardware optimizations.
 
 ---
 
@@ -10,68 +10,58 @@ Unlike traditional research that seeks to replace binary CPUs, this fabric opera
 
 The **Ternary Fabric Memory & Bus Specification (TFMBS)** is built on three pillars:
 
-1. **Binary Sovereignty:** The binary host remains authoritative, managing memory allocation and task scheduling via **Ternary Frame Descriptors (TFDs)**.
-2. **Vectorized Lanes:** Data is organized into parallel lanes, allowing SIMD-style execution natively in ternary.
-3. **Balanced Encoding:** Uses the **PT-5** packing scheme, squeezing 5 trits into every 8-bit byte ( states), achieving 95% storage efficiency on standard binary hardware.
+1. **Binary Sovereignty:** The host CPU manages task scheduling via **Ternary Frame Descriptors (TFDs)**.
+2. **Vectorized SIMD:** Hardware-native logic tiles **Ternary Processing Elements (TPEs)** into parallel lanes for massive throughput.
+3. **Hydrated Frames:** Data is stored in **PT-5** (5 trits per byte) for 95% storage efficiency but "hydrated" into 2-bit signed logic for logic execution.
 
 ---
 
 ### 📂 Repository Structure
 
-* `specs/`: Normative definitions for the Bus, Interconnect, and AI Engine.
-* `include/`: The `tfmbs.h` C header—the single source of truth for the ABI.
-* `tools/`: Python utilities for packing, unpacking, and simulating ternary kernels.
-* `src/`: Reference mediator mocks for simulating the host-to-fabric handshake.
-* `examples/`: Sample code for frame initialization and data packing.
+* `specs/`: Normative definitions for the Frame Model, Memory Bus, and AI Acceleration.
+* `include/`: `tfmbs.h`—The C ABI and single source of truth for the fabric.
+* `src/hw/`: **(New)** Synthesizable Verilog RTL for the TPEs, Vector Engine, and AXI Interconnect.
+* `src/pytfmbs/`: **(New)** Python C-Extensions for hardware-level control.
+* `tools/`: Python utilities for **Quantization**, **PT-5 Packing**, and **Ternary Hex Dumps**.
 
 ---
 
 ### 🚀 Quick Start
 
-#### 1. Requirements
+#### 1. Hardware-Native Toolchain
 
-* GCC (for C examples)
-* Python 3.x (for tools and simulation)
-
-#### 2. Build and Test
-
-Run the automated test suite to validate the codecs and the mediator mock:
+Convert floating-point weights into ternary binary frames ready for the fabric:
 
 ```bash
-chmod +x test_suite.sh
-./test_suite.sh
+# 1. Quantize weights to {-1, 0, 1}
+python3 tools/quantize.py my_weights.npy -o weights.txt
+
+# 2. Pack into PT-5 binary and generate TFD header
+python3 tools/ternary_cli.py weights.txt --lanes 15 --kernel 1
+
+# 3. Inspect the hydration mapping
+python3 tools/txd.py weights.txt.tfrm
 
 ```
 
-#### 3. Using the CLI
+#### 2. RTL Simulation
 
-Convert human-readable ternary strings into packed binary frames:
-
-```bash
-# Pack a string into a binary frame
-python3 tools/tf-cli.py pack "++0-0++0-0" -o my_data.tfrm
-
-# Unpack and verify
-python3 tools/tf-cli.py unpack my_data.tfrm
-
-```
+The fabric is designed for FPGA deployment. You can verify the `ternary_fabric_top.v` using Icarus Verilog or Vivado.
 
 ---
 
-### 🗺️ Roadmap
+### 🗺️ Roadmap Status: **Phase 3/4 Transition**
 
-The project is currently in **Phase 2: Tooling & ABI**. We are actively working on:
+We have successfully bridged the gap between spec and silicon.
 
-* Formalizing the Kernel Library.
-* Developing RTL (Verilog) for Ternary Processing Elements (TPEs).
-* Creating a "Ternary Hex Dump" visualizer.
-
-See [roadmap.md](https://www.google.com/search?q=roadmap.md) for the full path to hardware silicon.
+* **Phase 1 & 2:** Complete.
+* **Phase 3 (Hardware):** RTL for TPEs and AXI-Lite Interconnect is complete. Ready for FPGA validation.
+* **Phase 4 (Integration):** Initial Python bindings and quantization tools are live.
 
 ---
 
 ### 🤝 Contributing
 
-We welcome contributions from system architects and RTL engineers. Please see [CONTRIBUTING.md](https://www.google.com/search?q=CONTRIBUTING.md) for our standards on Binary Sovereignty and TFD-first development.
+We welcome contributions from system architects and RTL engineers. Please see `CONTRIBUTING.md` for our standards on **Binary Sovereignty** and **Zero-Skip logic** optimization.
 
 ---

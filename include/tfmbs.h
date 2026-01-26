@@ -15,6 +15,19 @@ extern "C" {
 #endif
 
 /**
+ * @brief Standard Kernel IDs
+ * Assigned to the `exec_hints` lower bits or a dedicated field.
+ */
+typedef enum {
+    TFMBS_KERNEL_NOP      = 0x00, // No operation
+    TFMBS_KERNEL_DOT      = 0x01, // Dot Product (Accumulate weight * input)
+    TFMBS_KERNEL_ADD      = 0x02, // Element-wise Addition
+    TFMBS_KERNEL_MUL      = 0x03, // Element-wise Multiplication
+    TFMBS_KERNEL_CONV2D   = 0x04, // 2D Convolution (requires specific stride)
+    TFMBS_KERNEL_MAXPOOL  = 0x05  // Ternary Max Pooling
+} tfmbs_kernel_t;
+
+/**
  * @brief Ternary Packing Formats
  * Defines how trits are mapped into binary storage.
  */
