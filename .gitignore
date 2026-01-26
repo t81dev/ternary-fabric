@@ -1,0 +1,32 @@
+# --- Compiled Binaries & Objects ---
+bin/
+obj_dir/
+*.o
+*.a
+*.d
+*.so
+v_bench_binary
+
+# --- Verilator & Simulation Artifacts ---
+*.vcd
+*.fst
+*.pyc
+__pycache__/
+.pytest_cache/
+
+# --- Python & Build System ---
+build/
+dist/
+*.egg-info/
+venv/
+.env
+
+# --- Ternary Data & Logs ---
+*.tfrm
+*.tfd
+weights.txt
+trace.vcd
+
+# --- OS Specific ---
+.DS_Store
+.Thumbs.db

@@ -12,7 +12,7 @@ module vector_engine #(
     
     // Control Interface
     input  wire                     enable,
-    input  wire [1:0]               op_mode,      // Reserved for future ops
+    input  wire [2:0]               op_mode,      // Command: 01=Dot, etc.
     
     // Data Interface (Unpacked from PT-5 by upstream Bus Controller)
     input  wire [(LANES*2)-1:0]     bus_weights,  // 2-bits per lane
@@ -30,6 +30,7 @@ module vector_engine #(
                 .clk(clk),
                 .reset(reset),
                 .enable(enable),
+                .op_mode(op_mode),        // <--- FIXED: Passing the command down
                 .weight(bus_weights[i*2 +: 2]),
                 .trit_in(bus_inputs[i*2 +: 2]),
                 .accumulator(vector_out[i*ACCUM_WIDTH +: ACCUM_WIDTH])

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdbool.h>
+#include <inttypes.h>
 #include "../include/tfmbs.h"
 
 // Mock internal fabric state
