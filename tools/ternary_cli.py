@@ -28,9 +28,14 @@ def generate_tfd(args, data_len):
     """
     # packing_fmt = 1 (PT-5), version = 1
     # Struct format: Q (uint64), I (uint32), H (uint16), H (uint16), I (uint32), I (uint32), I (uint32), B (uint8), 7x (padding)
+    # Fields: base_addr, frame_len, packing_fmt, lane_count, lane_stride, flags, exec_hints, version
+
+    # If exec_hints not provided, use kernel as base
+    hints = args.exec_hints if args.exec_hints != 0 else args.kernel
+
     return struct.pack("<QIHHI I I B 7x", 
         args.base_addr, data_len, 1, args.lanes, 
-        args.stride, 0, args.kernel, 1)
+        args.stride, 0, hints, 1)
 
 def main():
     parser = argparse.ArgumentParser(description="Ternary-CLI: Prepare data for the Fabric")
@@ -38,7 +43,8 @@ def main():
     parser.add_argument("--base_addr", type=int, default=0x40000000)
     parser.add_argument("--lanes", type=int, default=15)
     parser.add_argument("--stride", type=int, default=1)
-    parser.add_argument("--kernel", type=int, default=1, help="1: DOT, 3: MUL")
+    parser.add_argument("--kernel", type=int, default=1, help="Kernel ID (1: DOT, 3: MUL, 6: TGEMM)")
+    parser.add_argument("--exec_hints", type=int, default=0, help="Full 32-bit exec_hints value")
     args = parser.parse_args()
 
     # Read trits (expects space-separated or comma-separated -1, 0, 1)
@@ -56,7 +62,8 @@ def main():
         f.write(tfd_header)
 
     print(f"Successfully generated {args.input}.tfrm ({len(packed_data)} bytes)")
-    print(f"Header generated with Kernel ID: {args.kernel}")
+    hints = args.exec_hints if args.exec_hints != 0 else args.kernel
+    print(f"Header generated with exec_hints: {hex(hints)}")
 
 if __name__ == "__main__":
     main()

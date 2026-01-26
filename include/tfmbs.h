@@ -24,7 +24,8 @@ typedef enum {
     TFMBS_KERNEL_ADD      = 0x02, // Element-wise Addition
     TFMBS_KERNEL_MUL      = 0x03, // Element-wise Multiplication
     TFMBS_KERNEL_CONV2D   = 0x04, // 2D Convolution (requires specific stride)
-    TFMBS_KERNEL_MAXPOOL  = 0x05  // Ternary Max Pooling
+    TFMBS_KERNEL_MAXPOOL  = 0x05, // Ternary Max Pooling
+    TFMBS_KERNEL_TGEMM    = 0x06  // Ternary Matrix-Multiply
 } tfmbs_kernel_t;
 
 /**
@@ -62,6 +63,17 @@ typedef struct {
 #define TFMBS_FLAG_COHERENT   (1 << 2) // Request hardware-managed coherence
 #define TFMBS_FLAG_CRITICAL   (1 << 3) // Fail if hints are not understood
 #define TFMBS_FLAG_PINNED     (1 << 4) // Memory is guaranteed non-pageable
+
+/**
+ * @brief Execution Hints Bitmask
+ */
+#define TFMBS_HINT_KERNEL_MASK     0x000000FF
+#define TFMBS_HINT_QUANT_SHIFT     8
+#define TFMBS_HINT_QUANT_MASK      0x0000FF00
+#define TFMBS_HINT_BIAS_EN         (1 << 16)
+#define TFMBS_HINT_ZERO_SKIP_EN    (1 << 17)
+#define TFMBS_HINT_FREE_NEG_EN     (1 << 18)
+#define TFMBS_HINT_WEIGHT_BRDCST   (1 << 19)
 
 /**
  * @brief Status Codes

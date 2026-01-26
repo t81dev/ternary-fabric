@@ -28,6 +28,8 @@ This roadmap outlines the development phases for the Ternary Fabric Memory & Bus
 * [x] **Python Bindings:** Create `pyTFMBS` C-Extension for hardware orchestration.
 * [x] **Ternary Quantization Toolkit:** `quantize.py` for mapping FP32 weights.
 * [x] **Unified Build System:** `Makefile` and `setup.py` for full-stack deployment.
+* [x] **Free Negation & Zero-Skip:** Implemented in RTL and supported by `pytfmbs`.
+* [x] **T-GEMM Kernel:** Multi-lane matrix multiplication kernel added to fabric.
 * [ ] **Performance Profiling:** Measure throughput (TOPS/W) in simulation vs. reference C code.
 * [ ] **TFRM Loader:** Implement automated loading of `.tfrm` files into hardware SRAM via AXI.
 
