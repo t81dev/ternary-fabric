@@ -35,6 +35,8 @@ module axi_interconnect_v1 #(
     output reg [ADDR_WIDTH-1:0]   fabric_base_addr,
     output reg [15:0]             fabric_depth,
     output reg [7:0]              fabric_stride,
+    output reg [31:0]             fabric_exec_hints,
+    output reg [15:0]             fabric_lane_count,
     output reg                    fabric_start,
     input  wire                   fabric_done,
 
@@ -60,11 +62,13 @@ module axi_interconnect_v1 #(
     // Register Write Logic
     always @(posedge s_axi_aclk) begin
         if (!s_axi_aresetn) begin
-            fabric_start     <= 1'b0;
-            fabric_base_addr <= 0;
-            fabric_depth     <= 0;
-            fabric_stride    <= 0;
-            bvalid_reg       <= 1'b0;
+            fabric_start      <= 1'b0;
+            fabric_base_addr  <= 0;
+            fabric_depth      <= 0;
+            fabric_stride     <= 0;
+            fabric_exec_hints <= 0;
+            fabric_lane_count <= 15; // Default to max hardware lanes
+            bvalid_reg        <= 1'b0;
             sram_we_weight   <= 1'b0;
             sram_we_input    <= 1'b0;
             sram_waddr       <= 12'b0;
@@ -88,10 +92,12 @@ module axi_interconnect_v1 #(
                     sram_wdata    <= s_axi_wdata[23:0];
                 end else begin
                     case (s_axi_awaddr[6:0])
-                        7'h00: fabric_start     <= s_axi_wdata[0];
-                        7'h08: fabric_base_addr <= s_axi_wdata;
-                        7'h0C: fabric_depth     <= s_axi_wdata[15:0];
-                        7'h10: fabric_stride    <= s_axi_wdata[7:0];
+                        7'h00: fabric_start      <= s_axi_wdata[0];
+                        7'h08: fabric_base_addr  <= s_axi_wdata;
+                        7'h0C: fabric_depth      <= s_axi_wdata[15:0];
+                        7'h10: fabric_stride     <= s_axi_wdata[7:0];
+                        7'h14: fabric_exec_hints <= s_axi_wdata;
+                        7'h18: fabric_lane_count <= s_axi_wdata[15:0];
                     endcase
                 end
                 bvalid_reg <= 1'b1;
@@ -136,6 +142,8 @@ module axi_interconnect_v1 #(
                     7'h08: s_axi_rdata <= fabric_base_addr;
                     7'h0C: s_axi_rdata <= {16'b0, fabric_depth};
                     7'h10: s_axi_rdata <= {24'b0, fabric_stride};
+                    7'h14: s_axi_rdata <= fabric_exec_hints;
+                    7'h18: s_axi_rdata <= {16'b0, fabric_lane_count};
                     default: s_axi_rdata <= 32'hDEADBEEF;
                 endcase
             end

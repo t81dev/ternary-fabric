@@ -116,10 +116,8 @@ static PyObject* Fabric_results(FabricObject *self, PyObject *args) {
 }
 
 static PyObject* Fabric_run(FabricObject *self, PyObject *args) {
-    unsigned long base_addr;
-    int depth, lanes, stride, kernel;
-
-    if (!PyArg_ParseTuple(args, "kiiii", &base_addr, &depth, &lanes, &stride, &kernel))
+    PyObject *tfd_dict;
+    if (!PyArg_ParseTuple(args, "O!", &PyDict_Type, &tfd_dict))
         return NULL;
 
     volatile uint32_t* regs = (uint32_t*)self->mmio_ptr;
@@ -128,13 +126,37 @@ static PyObject* Fabric_run(FabricObject *self, PyObject *args) {
         return NULL;
     }
 
-    // Write to Registers
-    regs[2] = (uint32_t)base_addr; 
-    regs[3] = (uint32_t)depth;     
-    regs[4] = (uint32_t)stride;    
+    PyObject *item;
+
+    // base_addr
+    if ((item = PyDict_GetItemString(tfd_dict, "base_addr"))) {
+        regs[2] = (uint32_t)PyLong_AsUnsignedLong(item);
+    }
+
+    // frame_len or depth
+    if ((item = PyDict_GetItemString(tfd_dict, "depth")) ||
+        (item = PyDict_GetItemString(tfd_dict, "frame_len"))) {
+        regs[3] = (uint32_t)PyLong_AsLong(item);
+    }
+
+    // lane_stride or stride
+    if ((item = PyDict_GetItemString(tfd_dict, "lane_stride")) ||
+        (item = PyDict_GetItemString(tfd_dict, "stride"))) {
+        regs[4] = (uint32_t)PyLong_AsLong(item);
+    }
+
+    // exec_hints
+    if ((item = PyDict_GetItemString(tfd_dict, "exec_hints"))) {
+        regs[5] = (uint32_t)PyLong_AsUnsignedLong(item);
+    }
+
+    // lane_count
+    if ((item = PyDict_GetItemString(tfd_dict, "lane_count"))) {
+        regs[6] = (uint32_t)PyLong_AsLong(item);
+    }
     
 #ifdef __APPLE__
-    printf("[TFMBS-Mock] Frame started: Addr=0x%lx, Depth=%d, Kernel=%d\n", base_addr, depth, kernel);
+    printf("[TFMBS-Mock] Frame started via TFD\n");
 #endif
 
     regs[0] = 0x1;                 // Start signal

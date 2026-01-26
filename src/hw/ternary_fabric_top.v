@@ -39,6 +39,8 @@ module ternary_fabric_top #(
     wire [ADDR_WIDTH-1:0] f_base_addr;
     wire [15:0]           f_depth;
     wire [7:0]            f_stride;
+    wire [31:0]           f_exec_hints;
+    wire [15:0]           f_lane_count;
     wire                  f_start;
     wire                  f_done;
     wire [31:0]           f_mem_addr;
@@ -84,6 +86,8 @@ module ternary_fabric_top #(
         .fabric_base_addr(f_base_addr),
         .fabric_depth(f_depth),
         .fabric_stride(f_stride),
+        .fabric_exec_hints(f_exec_hints),
+        .fabric_lane_count(f_lane_count),
         .fabric_start(f_start),
         .fabric_done(f_done),
         .vector_results(vector_results),
@@ -153,7 +157,8 @@ module ternary_fabric_top #(
         .clk(clk),
         .reset(~reset_n),
         .enable(f_engine_en),
-        .op_mode(3'b001), // MAC mode
+        .exec_hints(f_exec_hints),
+        .lane_count(f_lane_count),
         .bus_weights(weight_trits),
         .bus_inputs(input_trits),
         .vector_out(vector_results)

@@ -17,15 +17,16 @@ def run_benchmark(matrix_size=64):
     
     # Map the TFD (Ternary Fabric Descriptor)
     # Stride 4 for 32-bit alignment, 15 lanes based on your previous logs
+    # Using TGEMM kernel (0x06) with Zero-Skip (bit 17) and Free-Neg (bit 18)
     tfd = {
         'base_addr': 0xDEADBEEF,
         'depth': matrix_size,
-        'lanes': 15,
+        'lane_count': 15,
         'stride': 4,
-        'kernel': 1 # Linear pass
+        'exec_hints': 0x06 | (1 << 17) | (1 << 18)
     }
     
-    result = fabric.send_tfd(tfd)
+    fabric.run(tfd)
     end_time = time.perf_counter()
     
     # 4. Calculate Metrics
