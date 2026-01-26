@@ -43,6 +43,12 @@ module ternary_fabric_top #(
     wire                  f_done;
     wire [31:0]           f_mem_addr;
     wire                  f_engine_en;
+
+    // SRAM Loader Wires
+    wire [11:0]           axi_sram_waddr;
+    wire [23:0]           axi_sram_wdata;
+    wire                  axi_sram_we_weight;
+    wire                  axi_sram_we_input;
     
     // AXI Response Wire
     wire [1:0]            s_axi_bresp;
@@ -79,7 +85,13 @@ module ternary_fabric_top #(
         .fabric_depth(f_depth),
         .fabric_stride(f_stride),
         .fabric_start(f_start),
-        .fabric_done(f_done)
+        .fabric_done(f_done),
+        .vector_results(vector_results),
+        // SRAM Write Interface
+        .sram_waddr(axi_sram_waddr),
+        .sram_wdata(axi_sram_wdata),
+        .sram_we_weight(axi_sram_we_weight),
+        .sram_we_input(axi_sram_we_input)
     );
 
     // 2. Frame Controller
@@ -97,15 +109,19 @@ module ternary_fabric_top #(
     );
 
     // 3. Dual-Bank SRAM
+    // Multiplex AXI loader and Frame Controller
+    wire [11:0] weight_addr = f_start ? f_mem_addr[11:0] : axi_sram_waddr;
+    wire [11:0] input_addr  = f_start ? f_mem_addr[11:0] : axi_sram_waddr;
+
     ternary_sram_wrapper #(12, 24) sram (
         .clk    (clk),
-        .addr_a (f_mem_addr[11:0]), 
-        .we_a   (1'b0), 
-        .din_a  (24'b0), 
+        .addr_a (weight_addr),
+        .we_a   (axi_sram_we_weight),
+        .din_a  (axi_sram_wdata),
         .dout_a (weight_bus),
-        .addr_b (f_mem_addr[11:0]), 
-        .we_b   (1'b0), 
-        .din_b  (24'b0), 
+        .addr_b (input_addr),
+        .we_b   (axi_sram_we_input),
+        .din_b  (axi_sram_wdata),
         .dout_b (input_bus)
     );
 

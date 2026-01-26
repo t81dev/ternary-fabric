@@ -21,7 +21,7 @@ OBJ_DIR = obj_dir
 VERILATOR_FLAGS = --cc $(HW_DIR)/ternary_fabric_top.v -I$(HW_DIR) --Mdir $(OBJ_DIR) -Wno-fatal
 
 # Targets
-ALL_C_BINS = $(BIN_DIR)/mediator_mock $(BIN_DIR)/pt5_example
+ALL_C_BINS = $(BIN_DIR)/mediator_mock $(BIN_DIR)/pt5_example $(BIN_DIR)/reference_tfmbs
 ALL_HW_SIM = $(BIN_DIR)/fabric_tb.vvp
 
 all: directories $(ALL_C_BINS) python_ext hw_sim
@@ -34,6 +34,9 @@ $(BIN_DIR)/mediator_mock: $(SRC_DIR)/mediator_mock.c
 	$(CC) $(CFLAGS) -o $@ $<
 
 $(BIN_DIR)/pt5_example: $(EX_DIR)/pt5_pack_example.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+$(BIN_DIR)/reference_tfmbs: $(SRC_DIR)/reference_tfmbs.c
 	$(CC) $(CFLAGS) -o $@ $<
 
 # --- Python Bindings (Phase 4) ---

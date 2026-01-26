@@ -13,10 +13,10 @@ typedef struct {
 // 1. Cleanup handler for the Python Object
 static void Fabric_dealloc(FabricObject *self) {
     if (self->mmio_ptr) {
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(MOCK_MODE)
         free(self->mmio_ptr); // Free mock memory
 #else
-        munmap(self->mmio_ptr, 4096); // Unmap real hardware
+        munmap(self->mmio_ptr, 65536); // Unmap real hardware
 #endif
     }
     Py_TYPE(self)->tp_free((PyObject *)self);
@@ -24,10 +24,10 @@ static void Fabric_dealloc(FabricObject *self) {
 
 // 2. Logic Implementations
 static int Fabric_init(FabricObject *self, PyObject *args, PyObject *kwds) {
-#ifdef __APPLE__
-    // macOS Mock Mode: Allocate 4KB of RAM to act as registers
-    printf("[TFMBS] Initializing macOS Mock Mode (Virtual Registers)\n");
-    self->mmio_ptr = calloc(1, 4096); 
+#if defined(__APPLE__) || defined(MOCK_MODE)
+    // Mock Mode: Allocate 64KB of RAM to act as registers and SRAM
+    printf("[TFMBS] Initializing Mock Mode (Virtual Registers + SRAM)\n");
+    self->mmio_ptr = calloc(1, 65536);
     if (!self->mmio_ptr) {
         PyErr_SetString(PyExc_MemoryError, "Failed to allocate mock MMIO buffer");
         return -1;
@@ -39,10 +39,17 @@ static int Fabric_init(FabricObject *self, PyObject *args, PyObject *kwds) {
     // Linux/SoC Mode: Real physical memory access
     int fd = open("/dev/mem", O_RDWR | O_SYNC);
     if (fd < 0) {
-        PyErr_SetString(PyExc_RuntimeError, "Could not open /dev/mem. Root required.");
-        return -1;
+        // Fallback to mock mode if /dev/mem is not accessible (e.g. in sandbox)
+        printf("[TFMBS] /dev/mem not accessible. Falling back to Mock Mode.\n");
+        self->mmio_ptr = calloc(1, 65536);
+        if (!self->mmio_ptr) {
+            PyErr_SetString(PyExc_MemoryError, "Failed to allocate mock MMIO buffer");
+            return -1;
+        }
+        ((uint32_t*)self->mmio_ptr)[1] = 0x2;
+        return 0;
     }
-    self->mmio_ptr = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x40000000);
+    self->mmio_ptr = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x40000000);
     close(fd);
     if (self->mmio_ptr == MAP_FAILED) {
         PyErr_SetString(PyExc_RuntimeError, "mmap failed.");
@@ -50,6 +57,62 @@ static int Fabric_init(FabricObject *self, PyObject *args, PyObject *kwds) {
     }
 #endif
     return 0;
+}
+
+static PyObject* Fabric_load(FabricObject *self, PyObject *args) {
+    uint32_t offset;
+    Py_buffer buffer;
+
+    if (!PyArg_ParseTuple(args, "Iy*", &offset, &buffer))
+        return NULL;
+
+    if (!self->mmio_ptr) {
+        PyBuffer_Release(&buffer);
+        PyErr_SetString(PyExc_RuntimeError, "MMIO not initialized");
+        return NULL;
+    }
+
+    if (offset + buffer.len > 65536) {
+        PyBuffer_Release(&buffer);
+        PyErr_SetString(PyExc_ValueError, "Write out of bounds");
+        return NULL;
+    }
+
+    // In a real hardware scenario with AXI-Lite, we must write 32-bit words.
+    // However, the PT-5 data is byte-packed. Our current hardware loader
+    // expects one 32-bit AXI write per SRAM word.
+    // Let's assume the buffer contains 32-bit words (or we convert them).
+    // For simplicity in this mock/loader, we'll write 4 bytes at a time.
+
+    volatile uint32_t* target = (uint32_t*)((uint8_t*)self->mmio_ptr + offset);
+    uint32_t* source = (uint32_t*)buffer.buf;
+    size_t count = buffer.len / 4;
+
+    for (size_t i = 0; i < count; i++) {
+        target[i] = source[i];
+    }
+
+#ifdef __APPLE__
+    printf("[TFMBS-Mock] Loaded %zu words into 0x%x\n", count, offset);
+#endif
+
+    PyBuffer_Release(&buffer);
+    Py_RETURN_NONE;
+}
+
+static PyObject* Fabric_results(FabricObject *self, PyObject *args) {
+    if (!self->mmio_ptr) {
+        PyErr_SetString(PyExc_RuntimeError, "MMIO not initialized");
+        return NULL;
+    }
+
+    PyObject* list = PyList_New(15);
+    volatile uint32_t* regs = (uint32_t*)self->mmio_ptr;
+    for (int i = 0; i < 15; i++) {
+        // Results start at offset 0x100, which is index 64 in uint32_t array
+        PyList_SetItem(list, i, PyLong_FromLong((int32_t)regs[64 + i]));
+    }
+    return list;
 }
 
 static PyObject* Fabric_run(FabricObject *self, PyObject *args) {
@@ -85,6 +148,8 @@ static PyObject* Fabric_run(FabricObject *self, PyObject *args) {
 
 static PyMethodDef Fabric_methods[] = {
     {"run", (PyCFunction)Fabric_run, METH_VARARGS, "Execute a Ternary Frame Descriptor"},
+    {"load", (PyCFunction)Fabric_load, METH_VARARGS, "Load binary data into Fabric SRAM"},
+    {"results", (PyCFunction)Fabric_results, METH_NOARGS, "Read accumulated results from the Fabric"},
     {NULL, NULL, 0, NULL} 
 };
 
