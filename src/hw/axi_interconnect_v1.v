@@ -37,11 +37,15 @@ module axi_interconnect_v1 #(
     output reg [7:0]              fabric_stride,
     output reg [31:0]             fabric_exec_hints,
     output reg [15:0]             fabric_lane_count,
+    output reg [14:0]             fabric_lane_mask,
     output reg                    fabric_start,
     input  wire                   fabric_done,
 
-    // Vector Results Input
+    // Vector Results & Profiling Input
     input  wire [(15*32)-1:0]     vector_results,
+    input  wire [(15*32)-1:0]     skip_counts,
+    input  wire [31:0]            cycle_count,
+    input  wire [31:0]            utilization_count,
 
     // SRAM Write Interface
     output reg [11:0]             sram_waddr,
@@ -68,6 +72,7 @@ module axi_interconnect_v1 #(
             fabric_stride     <= 0;
             fabric_exec_hints <= 0;
             fabric_lane_count <= 15; // Default to max hardware lanes
+            fabric_lane_mask  <= 15'h7FFF; // All lanes active by default
             bvalid_reg        <= 1'b0;
             sram_we_weight   <= 1'b0;
             sram_we_input    <= 1'b0;
@@ -98,6 +103,7 @@ module axi_interconnect_v1 #(
                         7'h10: fabric_stride     <= s_axi_wdata[7:0];
                         7'h14: fabric_exec_hints <= s_axi_wdata;
                         7'h18: fabric_lane_count <= s_axi_wdata[15:0];
+                        7'h1C: fabric_lane_mask  <= s_axi_wdata[14:0];
                     endcase
                 end
                 bvalid_reg <= 1'b1;
@@ -144,7 +150,34 @@ module axi_interconnect_v1 #(
                     7'h10: s_axi_rdata <= {24'b0, fabric_stride};
                     7'h14: s_axi_rdata <= fabric_exec_hints;
                     7'h18: s_axi_rdata <= {16'b0, fabric_lane_count};
-                    default: s_axi_rdata <= 32'hDEADBEEF;
+                    7'h1C: s_axi_rdata <= {17'b0, fabric_lane_mask};
+                    7'h20: s_axi_rdata <= cycle_count;
+                    7'h24: s_axi_rdata <= utilization_count;
+                    default: begin
+                        if (s_axi_araddr[6:0] >= 7'h28 && s_axi_araddr[6:0] <= 7'h64) begin
+                            // Skip counters range
+                            case ((s_axi_araddr[6:0] - 7'h28) >> 2)
+                                0:  s_axi_rdata <= skip_counts[0*32 +: 32];
+                                1:  s_axi_rdata <= skip_counts[1*32 +: 32];
+                                2:  s_axi_rdata <= skip_counts[2*32 +: 32];
+                                3:  s_axi_rdata <= skip_counts[3*32 +: 32];
+                                4:  s_axi_rdata <= skip_counts[4*32 +: 32];
+                                5:  s_axi_rdata <= skip_counts[5*32 +: 32];
+                                6:  s_axi_rdata <= skip_counts[6*32 +: 32];
+                                7:  s_axi_rdata <= skip_counts[7*32 +: 32];
+                                8:  s_axi_rdata <= skip_counts[8*32 +: 32];
+                                9:  s_axi_rdata <= skip_counts[9*32 +: 32];
+                                10: s_axi_rdata <= skip_counts[10*32 +: 32];
+                                11: s_axi_rdata <= skip_counts[11*32 +: 32];
+                                12: s_axi_rdata <= skip_counts[12*32 +: 32];
+                                13: s_axi_rdata <= skip_counts[13*32 +: 32];
+                                14: s_axi_rdata <= skip_counts[14*32 +: 32];
+                                default: s_axi_rdata <= 32'h0;
+                            endcase
+                        end else begin
+                            s_axi_rdata <= 32'hDEADBEEF;
+                        end
+                    end
                 endcase
             end
         end else if (s_axi_rready) begin

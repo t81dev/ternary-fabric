@@ -8,6 +8,7 @@
 typedef struct {
     PyObject_HEAD
     void* mmio_ptr;
+    int is_mock;
 } FabricObject;
 
 // 1. Cleanup handler for the Python Object
@@ -28,6 +29,7 @@ static int Fabric_init(FabricObject *self, PyObject *args, PyObject *kwds) {
     // Mock Mode: Allocate 64KB of RAM to act as registers and SRAM
     printf("[TFMBS] Initializing Mock Mode (Virtual Registers + SRAM)\n");
     self->mmio_ptr = calloc(1, 65536);
+    self->is_mock = 1;
     if (!self->mmio_ptr) {
         PyErr_SetString(PyExc_MemoryError, "Failed to allocate mock MMIO buffer");
         return -1;
@@ -42,6 +44,7 @@ static int Fabric_init(FabricObject *self, PyObject *args, PyObject *kwds) {
         // Fallback to mock mode if /dev/mem is not accessible (e.g. in sandbox)
         printf("[TFMBS] /dev/mem not accessible. Falling back to Mock Mode.\n");
         self->mmio_ptr = calloc(1, 65536);
+        self->is_mock = 1;
         if (!self->mmio_ptr) {
             PyErr_SetString(PyExc_MemoryError, "Failed to allocate mock MMIO buffer");
             return -1;
@@ -50,6 +53,7 @@ static int Fabric_init(FabricObject *self, PyObject *args, PyObject *kwds) {
         return 0;
     }
     self->mmio_ptr = mmap(NULL, 65536, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x40000000);
+    self->is_mock = 0;
     close(fd);
     if (self->mmio_ptr == MAP_FAILED) {
         PyErr_SetString(PyExc_RuntimeError, "mmap failed.");
@@ -62,27 +66,53 @@ static int Fabric_init(FabricObject *self, PyObject *args, PyObject *kwds) {
 static PyObject* Fabric_load(FabricObject *self, PyObject *args) {
     uint32_t offset;
     Py_buffer buffer;
+    char* filename = NULL;
+    int is_file = 0;
 
-    if (!PyArg_ParseTuple(args, "Iy*", &offset, &buffer))
-        return NULL;
+    // Try parsing (offset, bytes)
+    if (!PyArg_ParseTuple(args, "Iy*", &offset, &buffer)) {
+        PyErr_Clear();
+        // Try parsing (filename, offset)
+        if (!PyArg_ParseTuple(args, "sI", &filename, &offset)) {
+            return NULL;
+        }
+        is_file = 1;
+        FILE *f = fopen(filename, "rb");
+        if (!f) {
+            PyErr_SetString(PyExc_IOError, "Could not open file");
+            return NULL;
+        }
+        fseek(f, 0, SEEK_END);
+        size_t fsize = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        void* file_data = malloc(fsize);
+        if (!file_data) {
+            fclose(f);
+            return PyErr_NoMemory();
+        }
+        if (fread(file_data, 1, fsize, f) != fsize) {
+            free(file_data);
+            fclose(f);
+            PyErr_SetString(PyExc_IOError, "Read error");
+            return NULL;
+        }
+        fclose(f);
+        buffer.buf = file_data;
+        buffer.len = fsize;
+        buffer.obj = NULL;
+    }
 
     if (!self->mmio_ptr) {
-        PyBuffer_Release(&buffer);
+        if (!is_file) PyBuffer_Release(&buffer); else free(buffer.buf);
         PyErr_SetString(PyExc_RuntimeError, "MMIO not initialized");
         return NULL;
     }
 
     if (offset + buffer.len > 65536) {
-        PyBuffer_Release(&buffer);
+        if (!is_file) PyBuffer_Release(&buffer); else free(buffer.buf);
         PyErr_SetString(PyExc_ValueError, "Write out of bounds");
         return NULL;
     }
-
-    // In a real hardware scenario with AXI-Lite, we must write 32-bit words.
-    // However, the PT-5 data is byte-packed. Our current hardware loader
-    // expects one 32-bit AXI write per SRAM word.
-    // Let's assume the buffer contains 32-bit words (or we convert them).
-    // For simplicity in this mock/loader, we'll write 4 bytes at a time.
 
     volatile uint32_t* target = (uint32_t*)((uint8_t*)self->mmio_ptr + offset);
     uint32_t* source = (uint32_t*)buffer.buf;
@@ -92,12 +122,35 @@ static PyObject* Fabric_load(FabricObject *self, PyObject *args) {
         target[i] = source[i];
     }
 
-#ifdef __APPLE__
-    printf("[TFMBS-Mock] Loaded %zu words into 0x%x\n", count, offset);
+#if defined(__APPLE__) || defined(MOCK_MODE)
+    printf("[TFMBS-Mock] Loaded %zu words into 0x%x %s\n", count, offset, is_file ? filename : "");
 #endif
 
-    PyBuffer_Release(&buffer);
+    if (!is_file) PyBuffer_Release(&buffer); else free(buffer.buf);
     Py_RETURN_NONE;
+}
+
+static PyObject* Fabric_profile(FabricObject *self, PyObject *args) {
+    if (!self->mmio_ptr) {
+        PyErr_SetString(PyExc_RuntimeError, "MMIO not initialized");
+        return NULL;
+    }
+
+    volatile uint32_t* regs = (uint32_t*)self->mmio_ptr;
+    PyObject* dict = PyDict_New();
+
+    // Profiling counters start at offset 0x20 -> regs[8]
+    PyDict_SetItemString(dict, "cycles", PyLong_FromUnsignedLong(regs[8]));
+    PyDict_SetItemString(dict, "utilization", PyLong_FromUnsignedLong(regs[9]));
+
+    PyObject* skips = PyList_New(15);
+    for (int i = 0; i < 15; i++) {
+        // Skip counters start at 0x28 -> regs[10]
+        PyList_SetItem(skips, i, PyLong_FromUnsignedLong(regs[10 + i]));
+    }
+    PyDict_SetItemString(dict, "skips", skips);
+
+    return dict;
 }
 
 static PyObject* Fabric_results(FabricObject *self, PyObject *args) {
@@ -154,6 +207,13 @@ static PyObject* Fabric_run(FabricObject *self, PyObject *args) {
     if ((item = PyDict_GetItemString(tfd_dict, "lane_count"))) {
         regs[6] = (uint32_t)PyLong_AsLong(item);
     }
+
+    // lane_mask
+    if ((item = PyDict_GetItemString(tfd_dict, "lane_mask"))) {
+        regs[7] = (uint32_t)PyLong_AsLong(item);
+    } else {
+        regs[7] = 0x7FFF; // Default mask (15 lanes)
+    }
     
 #ifdef __APPLE__
     printf("[TFMBS-Mock] Frame started via TFD\n");
@@ -161,7 +221,69 @@ static PyObject* Fabric_run(FabricObject *self, PyObject *args) {
 
     regs[0] = 0x1;                 // Start signal
 
-    // On macOS, the mock 'done' bit is pre-set in init to avoid hanging.
+    if (self->is_mock) {
+    // --- Mock Simulation Logic ---
+    uint32_t depth = regs[3];
+    uint32_t exec_hints = regs[5];
+    uint32_t lane_count = regs[6];
+    uint32_t lane_mask = regs[7];
+
+    // SRAM regions at 0x1000 and 0x2000 (word-indexed)
+    uint32_t* weight_sram = (uint32_t*)((uint8_t*)regs + 0x1000);
+    uint32_t* input_sram = (uint32_t*)((uint8_t*)regs + 0x2000);
+    uint32_t* results = (uint32_t*)((uint8_t*)regs + 0x100);
+    uint32_t* cycle_count = &regs[8];
+    uint32_t* utilization_count = &regs[9];
+    uint32_t* skip_counts = &regs[10];
+
+    // Reset results and counters
+    for (int i=0; i<15; i++) {
+        results[i] = 0;
+        skip_counts[i] = 0;
+    }
+    *cycle_count = 0;
+    *utilization_count = 0;
+
+    for (uint32_t d = 0; d < depth; d++) {
+        (*cycle_count)++;
+        uint32_t w_word = weight_sram[d];
+        uint32_t i_word = input_sram[d];
+
+        int8_t w_trits[15];
+        int8_t i_trits[15];
+
+        uint32_t temp_w = w_word;
+        uint32_t temp_i = i_word;
+        for (int b = 0; b < 3; b++) {
+            uint8_t wb = temp_w & 0xFF; temp_w >>= 8;
+            uint8_t ib = temp_i & 0xFF; temp_i >>= 8;
+            for (int p = 0; p < 5; p++) {
+                uint8_t wt = wb % 3; wb /= 3;
+                uint8_t it = ib % 3; ib /= 3;
+                w_trits[b*5 + p] = (wt == 2) ? -1 : (int8_t)wt;
+                i_trits[b*5 + p] = (it == 2) ? -1 : (int8_t)it;
+            }
+        }
+
+        int active_this_cycle = 0;
+        for (int l = 0; l < 15; l++) {
+            if (l < lane_count && (lane_mask & (1 << l))) {
+                active_this_cycle++;
+                int8_t w = w_trits[l];
+                int8_t i = i_trits[l];
+
+                if ((exec_hints & (1 << 17)) && (w == 0 || i == 0)) {
+                    skip_counts[l]++;
+                } else {
+                    results[l] += (w * i);
+                }
+            }
+        }
+        *utilization_count += active_this_cycle;
+    }
+    regs[1] |= 0x2; // Set Done bit
+    }
+
     // In hardware, we wait for the RTL to toggle bit 1 of regs[1].
     while(!(regs[1] & 0x2));       
 
@@ -170,8 +292,9 @@ static PyObject* Fabric_run(FabricObject *self, PyObject *args) {
 
 static PyMethodDef Fabric_methods[] = {
     {"run", (PyCFunction)Fabric_run, METH_VARARGS, "Execute a Ternary Frame Descriptor"},
-    {"load", (PyCFunction)Fabric_load, METH_VARARGS, "Load binary data into Fabric SRAM"},
+    {"load", (PyCFunction)Fabric_load, METH_VARARGS, "Load binary data into Fabric SRAM (filename, offset) or (offset, bytes)"},
     {"results", (PyCFunction)Fabric_results, METH_NOARGS, "Read accumulated results from the Fabric"},
+    {"profile", (PyCFunction)Fabric_profile, METH_NOARGS, "Read performance counters from the Fabric"},
     {NULL, NULL, 0, NULL} 
 };
 

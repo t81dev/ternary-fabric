@@ -23,17 +23,23 @@ This roadmap outlines the development phases for the Ternary Fabric Memory & Bus
 * [x] **Bus Logic:** AXI4-Lite control plane and SRAM integration.
 * [x] **Verilator Validation:** Cycle-accurate verification of AXI handshakes and MAC results.
 
-## Phase 4: Integration & Toolchain (Current)
+## Phase 4: Integration & Toolchain (Complete)
 
 * [x] **Python Bindings:** Create `pyTFMBS` C-Extension for hardware orchestration.
 * [x] **Ternary Quantization Toolkit:** `quantize.py` for mapping FP32 weights.
 * [x] **Unified Build System:** `Makefile` and `setup.py` for full-stack deployment.
 * [x] **Free Negation & Zero-Skip:** Implemented in RTL and supported by `pytfmbs`.
 * [x] **T-GEMM Kernel:** Multi-lane matrix multiplication kernel added to fabric.
-* [ ] **Performance Profiling:** Measure throughput (TOPS/W) in simulation vs. reference C code.
-* [ ] **TFRM Loader:** Implement automated loading of `.tfrm` files into hardware SRAM via AXI.
 
-## Phase 5: Deployment & Scaling (Upcoming)
+## Phase 5: End-to-End Workflow & Profiling (Current)
+
+* [ ] **End-to-End Inference:** Run complete `.tfrm` workloads from host to fabric.
+* [ ] **Performance Profiling:** Implement hardware counters for lane utilization and Zero-Skip effectiveness.
+* [ ] **Dynamic Lane Handling:** Support for per-lane bitmasking and partial-lane operations.
+* [ ] **T-GEMM Verification:** Validate hardware matrix operations against a C reference.
+* [ ] **Optional: DMA Loader:** Hardware-accelerated `.tfrm` streaming via AXI DMA.
+
+## Phase 6: Deployment & Scaling (Upcoming)
 
 * [ ] **FPGA Validation:** Deploy on Xilinx/Intel FPGA to measure physical timing (Max Freq).
 * [ ] **Multi-Tile Scaling:** Expand `fabric_top.v` to support multiple vector engines.

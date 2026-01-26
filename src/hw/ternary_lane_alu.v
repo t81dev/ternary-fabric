@@ -12,7 +12,8 @@ module ternary_lane_alu (
     input  wire [1:0]  trit_in,
     input  wire [31:0] exec_hints,
     input  wire        enable,
-    output reg  [31:0] accumulator
+    output reg  [31:0] accumulator,
+    output reg  [31:0] skip_count
 );
 
     wire [7:0] op_mode      = exec_hints[7:0];
@@ -36,7 +37,11 @@ module ternary_lane_alu (
     always @(posedge clk or posedge reset) begin
         if (reset) begin
             accumulator <= 32'd0;
+            skip_count  <= 32'd0;
         end else if (enable) begin
+            if (skip_cycle) begin
+                skip_count <= skip_count + 1;
+            end
             case (op_mode)
                 8'h01, 8'h06: begin // DOT, TGEMM
                     if (!skip_cycle)
