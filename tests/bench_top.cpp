@@ -2,7 +2,7 @@
 #include <iomanip>
 #include <vector>
 #include "Vternary_fabric_top.h"
-#include "Vternary_fabric_top___024root.h" // Needed for internal signal access
+#include "Vternary_fabric_top___024root.h" 
 #include "verilated.h"
 #include "verilated_vcd_c.h"
 
@@ -14,10 +14,14 @@
 void tick(Vternary_fabric_top* top, VerilatedVcdC* tfp, int& main_time) {
     top->clk = 0;
     top->eval();
+#ifndef HEADLESS
     if (tfp) tfp->dump(main_time++);
+#endif
     top->clk = 1;
     top->eval();
+#ifndef HEADLESS
     if (tfp) tfp->dump(main_time++);
+#endif
 }
 
 void axi_write(Vternary_fabric_top* top, uint32_t addr, uint32_t data) {
@@ -47,24 +51,35 @@ uint32_t axi_read(Vternary_fabric_top* top, VerilatedVcdC* tfp, int& main_time, 
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
     Vternary_fabric_top* top = new Vternary_fabric_top;
-    
+    int main_time = 0;
+    VerilatedVcdC* tfp = nullptr;
+
+#ifndef HEADLESS
     Verilated::traceEverOn(true);
-    VerilatedVcdC* tfp = new VerilatedVcdC;
+    tfp = new VerilatedVcdC;
     top->trace(tfp, 99);
     tfp->open("bin/trace.vcd");
-    int main_time = 0;
-
     printf("🚀 Verilator PT-5 Fabric: Advanced AXI Handshake Test\n");
+#endif
 
+    // 1. Reset
     top->reset_n = 0;
     for(int i=0; i<5; i++) tick(top, tfp, main_time);
     top->reset_n = 1;
     tick(top, tfp, main_time);
 
-    // Write Config
+    // 2. Configure via AXI
     axi_write(top, REG_BASE, 0x00000000);
     tick(top, tfp, main_time);
-    axi_write(top, REG_DEPTH, 100);
+    
+    // In headless mode, we run a much larger depth for throughput profiling
+#ifdef HEADLESS
+    uint32_t test_depth = 1000000;
+#else
+    uint32_t test_depth = 100;
+#endif
+
+    axi_write(top, REG_DEPTH, test_depth);
     tick(top, tfp, main_time);
     axi_write(top, REG_STRIDE, 1);
     tick(top, tfp, main_time);
@@ -73,44 +88,56 @@ int main(int argc, char** argv) {
     top->s_axi_wvalid = 0;
     tick(top, tfp, main_time);
 
-    // Verify
+#ifndef HEADLESS
     uint32_t read_depth = axi_read(top, tfp, main_time, REG_DEPTH);
     printf("🔍 Hardware Readback: Depth = %d\n", read_depth);
+#endif
 
-    // Start
+    // 3. Start Engine
     axi_write(top, REG_START, 0x1);
     tick(top, tfp, main_time);
     top->s_axi_awvalid = 0;
     top->s_axi_wvalid = 0;
 
+#ifndef HEADLESS
     printf("----------------------------------------------------------------------------------------------------\n");
     printf(" Cyc | ADDR | L0 | L1 | L2 | L3 | L4 | L5 | L6 | L7 | L8 | L9 | L10| L11| L12| L13| L14|\n");
     printf("----------------------------------------------------------------------------------------------------\n");
+#endif
 
-    for (int i = 0; i < 300; i++) {
+    // 4. Main Simulation Loop
+    // Loop runs until f_done or a safety timeout
+    for (int i = 0; i < (test_depth * 2 + 100); i++) {
         tick(top, tfp, main_time);
 
+#ifndef HEADLESS
         if (i % 2 == 0) {
-            // Correct way to access internal wires in Verilator 5.0
             uint32_t current_addr = top->rootp->ternary_fabric_top__DOT__f_mem_addr;
             printf("%4d | %4d |", i, current_addr);
-            
             for(int l=0; l<15; l++) {
-                // Accessing wide signal array
                 uint32_t lane_val = top->vector_results[l]; 
                 printf("%3d|", lane_val & 0xFF); 
             }
             printf("\n");
         }
+#endif
 
-        if (top->rootp->ternary_fabric_top__DOT__f_done && i > 50) {
+        if (top->rootp->ternary_fabric_top__DOT__f_done) {
+#ifndef HEADLESS
             printf("----------------------------------------------------------------------------------------------------\n");
             printf("✅ Hardware Signaled DONE at cycle %d\n", i);
+#endif
             break;
         }
     }
 
-    tfp->close();
+#ifndef HEADLESS
+    if (tfp) {
+        tfp->close();
+        delete tfp;
+    }
+#endif
+
     delete top;
     return 0;
 }
