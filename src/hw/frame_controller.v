@@ -48,7 +48,9 @@ module frame_controller #(
                     if (mem_ready) begin
                         if (current_depth < frame_depth - 1) begin
                             current_depth <= current_depth + 1;
-                            mem_addr      <= mem_addr + ((LANE_COUNT / 5) * lane_stride);
+                            // For 15-lanes, each word (3 bytes) holds one step.
+                            // Increment address by lane_stride words.
+                            mem_addr      <= mem_addr + ((LANE_COUNT / 15) * lane_stride);
                         end else begin
                             state         <= DONE;
                             engine_enable <= 1'b0;

@@ -41,6 +41,7 @@ module ternary_fabric_top #(
     wire [7:0]            f_stride;
     wire [31:0]           f_exec_hints;
     wire [15:0]           f_lane_count;
+    wire [LANES-1:0]      f_lane_mask;
     wire                  f_start;
     wire                  f_done;
     wire [31:0]           f_mem_addr;
@@ -54,6 +55,11 @@ module ternary_fabric_top #(
     
     // AXI Response Wire
     wire [1:0]            s_axi_bresp;
+
+    // Profiling Wires
+    wire [(LANES*32)-1:0] f_skip_counts;
+    wire [31:0]           f_cycle_count;
+    wire [31:0]           f_utilization_count;
 
     // Memory Wires
     wire [23:0]           weight_bus;
@@ -88,9 +94,13 @@ module ternary_fabric_top #(
         .fabric_stride(f_stride),
         .fabric_exec_hints(f_exec_hints),
         .fabric_lane_count(f_lane_count),
+        .fabric_lane_mask(f_lane_mask),
         .fabric_start(f_start),
         .fabric_done(f_done),
         .vector_results(vector_results),
+        .skip_counts(f_skip_counts),
+        .cycle_count(f_cycle_count),
+        .utilization_count(f_utilization_count),
         // SRAM Write Interface
         .sram_waddr(axi_sram_waddr),
         .sram_wdata(axi_sram_wdata),
@@ -159,9 +169,13 @@ module ternary_fabric_top #(
         .enable(f_engine_en),
         .exec_hints(f_exec_hints),
         .lane_count(f_lane_count),
+        .lane_mask(f_lane_mask),
         .bus_weights(weight_trits),
         .bus_inputs(input_trits),
-        .vector_out(vector_results)
+        .vector_out(vector_results),
+        .skip_counts(f_skip_counts),
+        .cycle_count(f_cycle_count),
+        .utilization_count(f_utilization_count)
     );
 
 endmodule
