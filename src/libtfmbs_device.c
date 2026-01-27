@@ -2,12 +2,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <unistd.h>
 #include "tfmbs_device.h"
 
 #define FABRIC_POOL_SIZE (128 * 1024 * 1024) // 128 MB for emulation
 
 static uint8_t* g_fabric_pool = NULL;
 static size_t g_fabric_used = 0;
+static fabric_metrics_t g_last_metrics = {0, 0, 0, 0.0};
 
 static void init_fabric_pool() {
     if (!g_fabric_pool) {
@@ -25,8 +27,9 @@ static void init_fabric_pool() {
 void* fabric_alloc(size_t size) {
     init_fabric_pool();
 
-    // Alignment to 64 bytes
-    size_t aligned_size = (size + 63) & ~63;
+    // Alignment to page size for mprotect compatibility in the interposer
+    size_t ps = 4096;
+    size_t aligned_size = (size + ps - 1) & ~(ps - 1);
 
     if (g_fabric_used + aligned_size > FABRIC_POOL_SIZE) {
         fprintf(stderr, "[TFMBS-Device] Out of Fabric Memory! Requested %zu, used %zu/%d\n",
@@ -49,17 +52,6 @@ int is_fabric_ptr(const void* ptr) {
     return (uint8_t*)ptr >= g_fabric_pool && (uint8_t*)ptr < (g_fabric_pool + FABRIC_POOL_SIZE);
 }
 
-static uint8_t pack_trits_to_byte(const int8_t trits[5]) {
-    uint8_t byte_val = 0;
-    uint8_t p3 = 1;
-    for (int i = 0; i < 5; i++) {
-        uint8_t unsigned_trit = trits[i] + 1; // map -1,0,1 to 0,1,2
-        byte_val += (unsigned_trit * p3);
-        p3 *= 3;
-    }
-    return byte_val;
-}
-
 static void unpack_byte_to_trits(uint8_t byte_val, int8_t trits[5]) {
     for (int i = 0; i < 5; i++) {
         uint8_t unsigned_trit = byte_val % 3;
@@ -78,11 +70,14 @@ int fabric_memcpy_to(void* dest_fabric, const void* src_host, size_t size, int p
         uint8_t* dest = (uint8_t*)dest_fabric;
 
         for (size_t i = 0; i < num_bytes; i++) {
-            int8_t trits[5] = {0, 0, 0, 0, 0};
+            uint8_t byte_val = 0;
+            uint8_t p3 = 1;
             for (int j = 0; j < 5; j++) {
-                if (i * 5 + j < num_trits) trits[j] = src[i * 5 + j];
+                int8_t trit = (i * 5 + j < num_trits) ? src[i * 5 + j] : 0;
+                byte_val += (trit + 1) * p3;
+                p3 *= 3;
             }
-            dest[i] = pack_trits_to_byte(trits);
+            dest[i] = byte_val;
         }
     } else {
         __builtin_memcpy(dest_fabric, src_host, size);
@@ -112,18 +107,11 @@ int fabric_memcpy_from(void* dest_host, const void* src_fabric, size_t size, int
     return 0;
 }
 
+static int8_t g_w_trits[2000000];
+static int8_t g_i_trits[2000000];
+
 int fabric_exec_gemv(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols) {
     if (!is_fabric_ptr(weight_ptr) || !is_fabric_ptr(input_ptr) || !is_fabric_ptr(output_ptr)) {
-        fprintf(stderr, "[TFMBS-Device] GEMV Error: Non-fabric pointer provided\n");
-        return -1;
-    }
-
-    int8_t* w_trits = (int8_t*)malloc(rows * cols);
-    int8_t* i_trits = (int8_t*)malloc(cols);
-    int32_t* results = (int32_t*)output_ptr;
-
-    if (!w_trits || !i_trits) {
-        free(w_trits); free(i_trits);
         return -1;
     }
 
@@ -133,7 +121,7 @@ int fabric_exec_gemv(void* weight_ptr, void* input_ptr, void* output_ptr, int ro
         int8_t trits[5];
         unpack_byte_to_trits(w_packed[i], trits);
         for (int j = 0; j < 5; j++) {
-            if (i * 5 + j < rows * cols) w_trits[i * 5 + j] = trits[j];
+            if (i * 5 + j < rows * cols) g_w_trits[i * 5 + j] = trits[j];
         }
     }
 
@@ -143,20 +131,37 @@ int fabric_exec_gemv(void* weight_ptr, void* input_ptr, void* output_ptr, int ro
         int8_t trits[5];
         unpack_byte_to_trits(i_packed[i], trits);
         for (int j = 0; j < 5; j++) {
-            if (i * 5 + j < cols) i_trits[i * 5 + j] = trits[j];
+            if (i * 5 + j < cols) g_i_trits[i * 5 + j] = trits[j];
         }
     }
 
-    // GEMV
+    // Reset Metrics
+    g_last_metrics.zero_skips = 0;
+    g_last_metrics.total_ops = (long)rows * cols;
+    g_last_metrics.lanes_used = 15;
+
+    // GEMV with Zero-Skip Emulation
+    int32_t* results = (int32_t*)output_ptr;
     for (int r = 0; r < rows; r++) {
         int32_t acc = 0;
         for (int c = 0; c < cols; c++) {
-            acc += (int32_t)w_trits[r * cols + c] * (int32_t)i_trits[c];
+            int8_t w = g_w_trits[r * cols + c];
+            int8_t x = g_i_trits[c];
+            if (w == 0 || x == 0) {
+                g_last_metrics.zero_skips++;
+            } else {
+                acc += (int32_t)w * (int32_t)x;
+            }
         }
         results[r] = acc;
     }
 
-    free(w_trits);
-    free(i_trits);
+    g_last_metrics.sim_cycle_reduction = (double)g_last_metrics.zero_skips / g_last_metrics.total_ops * 100.0;
     return 0;
+}
+
+void fabric_get_metrics(fabric_metrics_t* out_metrics) {
+    if (out_metrics) {
+        *out_metrics = g_last_metrics;
+    }
 }
