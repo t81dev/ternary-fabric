@@ -124,26 +124,29 @@ The Ternary Fabric achieves extreme throughput by leveraging the zero-cost natur
 *   **[Visual Architecture](docs/visuals.md):** Diagrams and workflows of the fabric.
 *   **[TFMBS Specification](specs/):** Normative definitions for the Frame Model and Bus.
 *   **[API Guide](docs/07_API.md):** Detailed documentation for the `pytfmbs` Python library.
+*   **[Roadmap](docs/ROADMAP.md):** Strategy for transparent device-level acceleration.
 *   **[Hardware Guide](docs/03_HARDWARE.md):** Deep dive into RTL and architecture.
 
 ---
 
-## 🛠️ Roadmap Status: Phase 6 Milestone Reached — "The Fabric Illusion"
+## 🛠️ Roadmap Status: Phase 9 Milestone Reached — "Transparent Acceleration"
 
-We have successfully implemented **zero-patch acceleration** for `llama.cpp` through device-level memory interposition and compute offloading.
+We have successfully implemented **zero-patch acceleration** for `llama.cpp` through device-level memory interposition, asynchronous compute offloading, and LRU-based paging.
 
-*   ✅ **Hardware Base:** Multi-tile Scaling, Weight Broadcast, and Profiling (Phase 6b).
 *   ✅ **The Illusion:** Transparently redirecting `malloc`/`mmap` to the Fabric (Phase 2).
 *   ✅ **Auto-Residency:** Heuristic-based detection of weight scans and automatic PT-5 packing (Phase 4).
 *   ✅ **Compute Offload:** Transparent interception of GEMV loops with **CPU Short-Circuiting** (Phase 5).
-*   ✅ **Ternary Advantage:** Quantified operation reduction via **Zero-Skip** metrics (Phase 6).
-*   📅 **Next Steps:** Paging/LRU (Phase 7) and Async Pipelining (Phase 8).
+*   ✅ **Ternary Advantage:** ~64-76% operation reduction via **Zero-Skip** metrics (Phase 6).
+*   ✅ **Paging & LRU:** Transparent management of models exceeding Fabric memory (Phase 7).
+*   ✅ **Async Pipeline:** Background execution with background worker threads (Phase 8).
+*   ✅ **Telemetry:** Real-time terminal-based efficiency dashboard (Phase 9).
+*   📅 **Next Steps:** Hardware Path (Phase 10) and Multi-Fabric Scaling (Phase 11).
 
 ### 🚀 Proof-of-Concept Demo
 Running a standard GEMV workload through the interposer yields:
 ```text
-[TFMBS] Establishing Residency (Auto-packing weights to PT-5)
-[TFMBS] Offload GEMV Detected
+[TFMBS] Established Residency (Auto-packing weights to PT-5)
+[TFMBS] Offload GEMV Detected [Async Queue: 1]
 [TFMBS] Done. Skips: 169,392 (64.6% operation reduction)
 [TFMBS] Short-circuit: Jumping CPU over redundant loop.
 ```
