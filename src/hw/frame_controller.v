@@ -22,9 +22,11 @@ module frame_controller #(
 
     // Adjust stride for T-CONV if hint is set
     // Bits [21:20] of exec_hints: Stride (1-4)
-    wire [1:0] conv_stride = exec_hints[21:20];
-    wire [7:0] actual_stride = (exec_hints[7:0] == 8'h04) ?
-                                (lane_stride * (conv_stride + 1)) : lane_stride;
+    wire [1:0] conv_stride_hint = exec_hints[21:20];
+    wire [3:0] conv_stride_val  = conv_stride_hint + 1;
+    wire [7:0] actual_stride = (exec_hints[7:0] == 8'h04) ? (lane_stride * conv_stride_val) :
+                               (exec_hints[7:0] == 8'h07) ? (lane_stride * conv_stride_val * conv_stride_val) :
+                               lane_stride;
     
     // State definitions
     localparam IDLE = 2'b00;

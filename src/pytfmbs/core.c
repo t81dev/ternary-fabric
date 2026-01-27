@@ -359,8 +359,11 @@ static int internal_Fabric_submit(FabricObject *self, PyObject *tfd_dict) {
             volatile uint32_t* t_overflow = (volatile uint32_t*)((uint8_t*)regs + overflow_off);
 
             for (int i=0; i<15; i++) {
-                t_results[i] = (op_mode == TFMBS_KERNEL_MAXPOOL && (exec_hints >> 29) == 0x1) ? 0x7FFFFFFF :
-                             (op_mode == TFMBS_KERNEL_MAXPOOL && (exec_hints >> 29) == 0x0) ? (uint32_t)0x80000000 : 0;
+                // State Management: Only clear accumulator if BIAS_EN hint is NOT set
+                if (!(exec_hints & TFMBS_HINT_BIAS_EN)) {
+                    t_results[i] = (op_mode == TFMBS_KERNEL_MAXPOOL && (exec_hints >> 29) == 0x1) ? 0x7FFFFFFF :
+                                 (op_mode == TFMBS_KERNEL_MAXPOOL && (exec_hints >> 29) == 0x0) ? (uint32_t)0x80000000 : 0;
+                }
                 t_skips[i] = 0;
                 t_active[i] = 0;
             }

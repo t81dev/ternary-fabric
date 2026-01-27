@@ -33,24 +33,24 @@ Supports Max, Min, and Average pooling.
 *   **DOT:** Performs $Acc = \sum (W_i \times I_i)$.
 *   **MUL:** Performs $Out_i = W_i \times I_i$. The result registers contain the last product for each lane.
 
-## 5. Experimental Kernels (Reference-Backed)
+## 5. Accelerated Ternary Kernels (Phase 15 Maturation)
 
-These kernels are currently available in the Python reference layer and API surface, serving as correctness and interface prototypes. RTL acceleration and performance characterization are planned.
+These kernels have been promoted from software reference to full RTL acceleration. They leverage the vectorized ternary lanes for high-throughput execution.
 
 ### T-CONV3D
 **Kernel ID:** `0x07`
-**Status:** Experimental
-Extends the 2D convolution logic with a deeper spatial traversal simulation in the reference mock.
+**Status:** Accelerated
+Extends the 2D convolution logic with a 3D spatial traversal. The hardware automatically calculates squared-stride offsets for memory addressing.
 
 ### T-LSTM
 **Kernel ID:** `0x08`
-**Status:** Experimental
-Supports recurrent ternary operations. Uses standard accumulation patterns in the current reference model.
+**Status:** Accelerated
+Supports recurrent ternary operations. Optimized with hardware state-management, allowing the accumulator to persist across multiple frame descriptors when the `BIAS_EN` hint is set.
 
 ### T-ATTENTION
 **Kernel ID:** `0x09`
-**Status:** Experimental
-Implements the core dot-product attention mechanism using ternary-quantized Query, Key, and Value vectors.
+**Status:** Accelerated
+Implements the core multi-head attention projection mechanism using ternary-quantized Query, Key, and Value vectors. Supports persistent state for key-value caching optimization.
 
 ## 6. Summary Table of Hints
 
@@ -59,6 +59,6 @@ Implements the core dot-product attention mechanism using ternary-quantized Quer
 | TGEMM | - | Zero-Skip, Broadcast |
 | CONV2D | Stride, KSize | Pad, Dilation |
 | MAXPOOL| Pool_Win, Pool_Op | - |
-| CONV3D | Stride | Experimental |
-| LSTM   | - | Experimental |
-| ATTN   | - | Experimental |
+| CONV3D | Stride | Zero-Skip |
+| LSTM   | - | BIAS_EN (State Persistence) |
+| ATTN   | - | BIAS_EN (State Persistence) |
