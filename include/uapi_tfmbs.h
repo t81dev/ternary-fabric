@@ -10,6 +10,7 @@
 #define TFMBS_UAPI_H
 
 #include <stdint.h>
+#include "tfmbs.h"
 
 #ifdef __linux__
 #include <linux/ioctl.h>
@@ -81,5 +82,6 @@ typedef struct {
 #define TFMBS_IOC_WAIT         _IOW(TFMBS_IOC_MAGIC, 0x06, tfmbs_ioc_wait_t)
 #define TFMBS_IOC_GET_METRICS  _IOR(TFMBS_IOC_MAGIC, 0x07, tfmbs_ioc_metrics_t)
 #define TFMBS_IOC_GET_INFO     _IOR(TFMBS_IOC_MAGIC, 0x08, tfmbs_ioc_device_info_t)
+#define TFMBS_IOC_SUBMIT       _IOW(TFMBS_IOC_MAGIC, 0x09, tfmbs_tfd_t)
 
 #endif /* TFMBS_UAPI_H */

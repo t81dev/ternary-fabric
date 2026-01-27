@@ -55,6 +55,17 @@ int main() {
     assert(info.num_tiles == 4);
     printf("✅ Device Info: %u tiles, %u lanes, %lu bytes pool\n", info.num_tiles, info.lanes_per_tile, info.total_pool_size);
 
+    // Test TFD Submit
+    tfmbs_tfd_t tfd = {
+        .base_addr = alloc_args.addr,
+        .frame_len = 5,
+        .exec_hints = TFMBS_KERNEL_NOP,
+        .tile_mask = 0x01
+    };
+    ret = tfmbs_dev_ioctl(fd, TFMBS_IOC_SUBMIT, &tfd);
+    assert(ret == 0);
+    printf("✅ TFD Submit successful\n");
+
     // Test Free
     tfmbs_ioc_free_t free_args = { .addr = alloc_args.addr };
     ret = tfmbs_dev_ioctl(fd, TFMBS_IOC_FREE, &free_args);

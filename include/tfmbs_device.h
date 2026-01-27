@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "tfmbs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,6 +30,9 @@ int fabric_exec_gemv(void* weight_ptr, void* input_ptr, void* output_ptr, int ro
 // Async API (Phase 8)
 fabric_handle_t fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols);
 void fabric_wait(fabric_handle_t handle);
+
+// Low-level TFD submission (Phase 10)
+int fabric_submit_tfd(tfmbs_tfd_t* tfd);
 
 void fabric_get_metrics(fabric_metrics_t* out_metrics);
 int is_fabric_ptr(const void* ptr);
