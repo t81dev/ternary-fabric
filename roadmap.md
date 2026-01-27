@@ -46,11 +46,12 @@ This roadmap outlines the development phases for the Ternary Fabric Memory & Bus
 * [x] **Profiling Enhancements:** Per-lane counters (active cycles), overflow flags, and burst latency tracking.
 * [x] **End-to-End Regression Suite:** Automated `pytest` suite for kernel validation and counter verification.
 
-## Phase 6b: Deployment & Scaling (Upcoming)
+## Phase 6b: Deployment & Scaling (Current)
 
-* [ ] **FPGA Validation:** Deploy on Xilinx/Intel FPGA to measure physical timing (Max Freq).
-* [ ] **Multi-Tile Scaling:** Expand `fabric_top.v` to support multiple vector engines.
-* [ ] **ASIC Path:** Design-rule check (DRC) for native ternary SRAM cells for maximum density.
+* [/] **FPGA Validation:** Synthesizable RTL updated for multi-tile configuration. Fmax estimates pending.
+* [x] **Multi-Tile Scaling:** Expanded `ternary_fabric_top.v` with parameterized `NUM_TILES`.
+* [x] **Tile-Aware Control:** Implemented `tile_mask` support in TFD and RTL.
+* [/] **ASIC Path:** Behavioral SRAM wrapper with clock-enable hooks for power gating.
 
 ---
 
@@ -58,14 +59,12 @@ This roadmap outlines the development phases for the Ternary Fabric Memory & Bus
 
 | File | Status | Description |
 | --- | --- | --- |
-| `include/tfmbs.h` | ✅ | ABI Header with Kernel IDs and TFD struct. |
-| `tools/ternary_cli.py` | ✅ | PT-5 Packing and TFD header generator. |
-| `tools/quantize.py` | ✅ | FP32 to Ternary thresholding utility. |
-| `src/hw/tpe_lane.v` | ✅ | Single lane ALU (Sign-flip logic). |
-| `src/hw/ternary_fabric_top.v` | ✅ | Top-level AXI-integrated accelerator. |
-| `src/pytfmbs/core.c` | ✅ | C-Extension for Python-to-Hardware MMIO. |
-| `tests/bench_top.cpp` | ✅ | C++ Cycle-accurate hardware benchmark. |
-| `tests/test_phase6.py` | ✅ | Pytest-based Phase 6 regression suite. |
-| `Makefile` | ✅ | Orchestrates C, Python, and Verilog builds. |
+| `include/tfmbs.h` | ✅ | ABI Header with `tile_mask` in TFD. |
+| `src/hw/ternary_fabric_top.v` | ✅ | Parameterized Multi-Tile Fabric Top. |
+| `src/hw/axi_interconnect_v1.v` | ✅ | Tile-aware address decoder and broadcast logic. |
+| `src/hw/ternary_sram_wrapper.v` | ✅ | ASIC-ready behavioral SRAM with power hooks. |
+| `src/pytfmbs/core.c` | ✅ | Multi-tile mock simulation and extended API. |
+| `docs/validation/phase6b/` | 📂 | FPGA synthesis and validation logs. |
+| `tests/test_multi_tile.py` | 🛠️ | Multi-tile regression suite (In progress). |
 
 ---
