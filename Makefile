@@ -21,7 +21,7 @@ OBJ_DIR = obj_dir
 VERILATOR_FLAGS = --cc $(HW_DIR)/ternary_fabric_top.v -I$(HW_DIR) --Mdir $(OBJ_DIR) -Wno-fatal
 
 # Targets
-ALL_C_BINS = $(BIN_DIR)/mediator_mock $(BIN_DIR)/pt5_example $(BIN_DIR)/reference_tfmbs $(BIN_DIR)/test_device $(BIN_DIR)/mock_llama
+ALL_C_BINS = $(BIN_DIR)/mediator_mock $(BIN_DIR)/pt5_example $(BIN_DIR)/reference_tfmbs $(BIN_DIR)/test_device $(BIN_DIR)/mock_llama $(BIN_DIR)/test_dynamic_detection $(BIN_DIR)/test_phase10
 ALL_LIBS = $(BIN_DIR)/libtfmbs_device.so $(BIN_DIR)/libtfmbs_intercept.so
 ALL_HW_SIM = $(BIN_DIR)/fabric_tb.vvp
 
@@ -52,6 +52,12 @@ $(BIN_DIR)/test_device: tests/test_device.c $(BIN_DIR)/libtfmbs_device.so
 
 $(BIN_DIR)/mock_llama: tests/mock_llama.c
 	$(CC) $(CFLAGS) -o $@ $<
+
+$(BIN_DIR)/test_dynamic_detection: tests/test_dynamic_detection.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+$(BIN_DIR)/test_phase10: tests/test_phase10.c $(SRC_DIR)/tfmbs_driver_mock.c $(SRC_DIR)/fabric_emulator.c
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $^
 
 run_mock_llama: $(BIN_DIR)/mock_llama $(ALL_LIBS)
 	export FABRIC_SHORT_CIRCUIT=1; \

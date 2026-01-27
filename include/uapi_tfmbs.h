@@ -51,6 +51,7 @@ typedef struct {
     uint64_t output_addr;
     uint32_t rows;
     uint32_t cols;
+    uint8_t  tile_mask;
     uint64_t handle; // OUT: Async task handle
 } tfmbs_ioc_submit_gemv_t;
 
@@ -66,6 +67,12 @@ typedef struct {
     uint32_t evictions;
 } tfmbs_ioc_metrics_t;
 
+typedef struct {
+    uint32_t num_tiles;
+    uint32_t lanes_per_tile;
+    uint64_t total_pool_size;
+} tfmbs_ioc_device_info_t;
+
 #define TFMBS_IOC_ALLOC        _IOWR(TFMBS_IOC_MAGIC, 0x01, tfmbs_ioc_alloc_t)
 #define TFMBS_IOC_FREE         _IOW(TFMBS_IOC_MAGIC, 0x02, tfmbs_ioc_free_t)
 #define TFMBS_IOC_MEMCPY_TO    _IOW(TFMBS_IOC_MAGIC, 0x03, tfmbs_ioc_memcpy_to_t)
@@ -73,5 +80,6 @@ typedef struct {
 #define TFMBS_IOC_SUBMIT_GEMV  _IOWR(TFMBS_IOC_MAGIC, 0x05, tfmbs_ioc_submit_gemv_t)
 #define TFMBS_IOC_WAIT         _IOW(TFMBS_IOC_MAGIC, 0x06, tfmbs_ioc_wait_t)
 #define TFMBS_IOC_GET_METRICS  _IOR(TFMBS_IOC_MAGIC, 0x07, tfmbs_ioc_metrics_t)
+#define TFMBS_IOC_GET_INFO     _IOR(TFMBS_IOC_MAGIC, 0x08, tfmbs_ioc_device_info_t)
 
 #endif /* TFMBS_UAPI_H */
