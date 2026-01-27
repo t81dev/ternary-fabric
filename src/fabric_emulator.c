@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -47,9 +48,25 @@ static void* fabric_worker_loop(void* arg);
 
 static void init_fabric_pool() {
     if (!g_fabric_pool_host) {
-        int fd = memfd_create("tfmbs_pool", 0);
+        int fd = -1;
+#if defined(__linux__)
+        fd = memfd_create("tfmbs_pool", 0);
+#elif defined(__APPLE__)
+        #ifdef SHM_ANON
+        fd = shm_open(SHM_ANON, O_RDWR | O_CREAT, 0600);
+        #else
+        const char* shm_path = "/tfmbs_pool";
+        fd = shm_open(shm_path, O_RDWR | O_CREAT | O_EXCL, 0600);
+        if (fd >= 0) shm_unlink(shm_path);
+        else fd = shm_open(shm_path, O_RDWR, 0600);
+        #endif
+#else
+        char temp_path[] = "/tmp/tfmbs_pool_XXXXXX";
+        fd = mkstemp(temp_path);
+        if (fd >= 0) unlink(temp_path);
+#endif
         if (fd < 0) {
-            perror("[TFMBS-Device] memfd_create failed");
+            perror("[TFMBS-Device] Failed to create anonymous file");
             exit(1);
         }
         if (ftruncate(fd, FABRIC_POOL_SIZE) < 0) {

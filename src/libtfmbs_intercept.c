@@ -12,6 +12,22 @@
 #include <errno.h>
 #include "tfmbs_device.h"
 
+#if defined(__linux__) && defined(__x86_64__)
+#define HAS_REG_ACCESS 1
+#define REG_RIP_LVAL(uc) ((uc)->uc_mcontext.gregs[REG_RIP])
+#define REG_ERR_LVAL(uc) ((uc)->uc_mcontext.gregs[REG_ERR])
+#elif defined(__APPLE__) && defined(__x86_64__)
+#define HAS_REG_ACCESS 1
+#define REG_RIP_LVAL(uc) ((uc)->uc_mcontext->__ss.__rip)
+#define REG_ERR_LVAL(uc) ((uc)->uc_mcontext->__es.__err)
+#elif defined(__APPLE__) && defined(__arm64__)
+#define HAS_REG_ACCESS 1
+#define REG_RIP_LVAL(uc) ((uc)->uc_mcontext->__ss.__pc)
+#define REG_ERR_LVAL(uc) (*(unsigned long long*)0) // Not easily available, don't use
+#else
+#define HAS_REG_ACCESS 0
+#endif
+
 static void* (*real_malloc)(size_t) = NULL;
 static void (*real_free)(void*) = NULL;
 static void* (*real_realloc)(void*, size_t) = NULL;
@@ -61,9 +77,9 @@ static void sigsegv_handler(int sig, siginfo_t* si, void* unused) {
     fabric_metadata_t* m = find_meta(si->si_addr);
     if (m) {
         unsigned long seq = ++g_access_seq;
-#if defined(__x86_64__)
+#if HAS_REG_ACCESS && defined(__x86_64__)
         ucontext_t* uc = (ucontext_t*)unused;
-        if (uc->uc_mcontext.gregs[REG_ERR] & 0x2) m->last_write_seq = seq;
+        if (REG_ERR_LVAL(uc) & 0x2) m->last_write_seq = seq;
         else m->last_read_seq = seq;
 #else
         m->last_read_seq = seq;
@@ -150,13 +166,13 @@ static void sigsegv_handler(int sig, siginfo_t* si, void* unused) {
 
                 if (g_short_circuit_enabled) {
                     ucontext_t* uc = (ucontext_t*)unused;
-#if defined(__x86_64__)
-                    unsigned char* rip = (unsigned char*)uc->uc_mcontext.gregs[REG_RIP];
+#if HAS_REG_ACCESS && defined(__x86_64__)
+                    unsigned char* rip = (unsigned char*)REG_RIP_LVAL(uc);
                     int found = 0;
                     for (int j=0; j<30000; j++) {
                         if (memcmp(rip+j, "\x90\x90\x90\x90\x90\x90\x90\x90", 8) == 0) {
                             safe_log("[TFMBS] Short-circuit Jump: Skipping %d bytes of CPU compute.\n", j);
-                            uc->uc_mcontext.gregs[REG_RIP] += (j+8);
+                            REG_RIP_LVAL(uc) += (j+8);
                             mprotect(m->ptr, m->size, PROT_NONE);
                             found = 1; break;
                         }
