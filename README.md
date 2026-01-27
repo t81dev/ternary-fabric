@@ -4,7 +4,7 @@
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
 [![TFMBS Version](https://img.shields.io/badge/TFMBS-v0.1--draft-blue.svg)](include/tfmbs.h)
 
-The **Ternary Fabric** is a ternary-native memory and interconnect co-processor designed to accelerate AI and signal processing workloads. It operates as an **execution adjacency** to a binary host, utilizing balanced-ternary semantics ({-1, 0, 1}) to eliminate multiplication overhead and enable fine-grained hardware optimizations.
+**Ternary Fabric** is a ternary-native memory and interconnect co-processor designed to accelerate AI and signal processing workloads. It operates as an **execution adjacency** to a binary host, utilizing balanced-ternary semantics ({-1, 0, 1}) to eliminate multiplication overhead and enable fine-grained hardware optimizations.
 
 ---
 
