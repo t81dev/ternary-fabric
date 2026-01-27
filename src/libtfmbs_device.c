@@ -82,7 +82,13 @@ int fabric_exec_gemv(void* weight_ptr, void* input_ptr, void* output_ptr, int ro
 fabric_handle_t fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols) {
     init_device();
     if (g_tfmbs_fd >= 0) {
-        tfmbs_ioc_submit_gemv_t args = { .weight_addr = (uint64_t)weight_ptr, .input_addr = (uint64_t)input_ptr, .output_addr = (uint64_t)output_ptr, .rows = rows, .cols = cols };
+        tfmbs_ioc_submit_gemv_t args = {
+            .weight_addr = (uint64_t)weight_ptr,
+            .input_addr = (uint64_t)input_ptr,
+            .output_addr = (uint64_t)output_ptr,
+            .rows = rows, .cols = cols,
+            .tile_mask = 0xF // Default to all tiles
+        };
         if (tfmbs_dev_ioctl(g_tfmbs_fd, TFMBS_IOC_SUBMIT_GEMV, &args) == 0) {
             return (fabric_handle_t)args.handle;
         }

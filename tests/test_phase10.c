@@ -48,6 +48,13 @@ int main() {
     assert(ret == 0);
     printf("✅ Metrics retrieved: Pool %u/%u\n", metrics.pool_used, metrics.pool_total);
 
+    // Test Info
+    tfmbs_ioc_device_info_t info;
+    ret = tfmbs_dev_ioctl(fd, TFMBS_IOC_GET_INFO, &info);
+    assert(ret == 0);
+    assert(info.num_tiles == 4);
+    printf("✅ Device Info: %u tiles, %u lanes, %lu bytes pool\n", info.num_tiles, info.lanes_per_tile, info.total_pool_size);
+
     // Test Free
     tfmbs_ioc_free_t free_args = { .addr = alloc_args.addr };
     ret = tfmbs_dev_ioctl(fd, TFMBS_IOC_FREE, &free_args);

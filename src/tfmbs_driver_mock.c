@@ -49,6 +49,7 @@ int tfmbs_dev_ioctl(int fd, unsigned long request, void* arg) {
         }
         case TFMBS_IOC_SUBMIT_GEMV: {
             tfmbs_ioc_submit_gemv_t* s = (tfmbs_ioc_submit_gemv_t*)arg;
+            // Note: Emulator doesn't yet support tile_mask explicitly, it uses all lanes.
             s->handle = (uint64_t)emu_fabric_exec_gemv_async((void*)s->weight_addr, (void*)s->input_addr, (void*)s->output_addr, s->rows, s->cols);
             return s->handle ? 0 : -EIO;
         }
@@ -66,6 +67,13 @@ int tfmbs_dev_ioctl(int fd, unsigned long request, void* arg) {
             m->pool_used = (uint32_t)fm.pool_used;
             m->pool_total = (uint32_t)fm.pool_total;
             m->evictions = fm.eviction_count;
+            return 0;
+        }
+        case TFMBS_IOC_GET_INFO: {
+            tfmbs_ioc_device_info_t* i = (tfmbs_ioc_device_info_t*)arg;
+            i->num_tiles = 4;
+            i->lanes_per_tile = 15;
+            i->total_pool_size = 128 * 1024 * 1024;
             return 0;
         }
         default:
