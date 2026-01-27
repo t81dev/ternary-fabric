@@ -7,6 +7,24 @@ VVP = vvp
 YOSYS = yosys
 VERILATOR = verilator
 
+# OS Detection
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+	SHLIB_EXT = .dylib
+	LDFLAGS_SHARED = -dynamiclib
+	PRELOAD_ENV = DYLD_INSERT_LIBRARIES
+	LIBPATH_ENV = DYLD_LIBRARY_PATH
+	LDLIBS_DL =
+	NPROC = $(shell sysctl -n hw.ncpu)
+else
+	SHLIB_EXT = .so
+	LDFLAGS_SHARED = -shared
+	PRELOAD_ENV = LD_PRELOAD
+	LIBPATH_ENV = LD_LIBRARY_PATH
+	LDLIBS_DL = -ldl
+	NPROC = $(shell nproc 2>/dev/null || echo 1)
+endif
+
 # Paths
 CFLAGS = -I./include -Wall -Wextra -O2
 SRC_DIR = src
@@ -22,7 +40,7 @@ VERILATOR_FLAGS = --cc $(HW_DIR)/ternary_fabric_top.v -I$(HW_DIR) --Mdir $(OBJ_D
 
 # Targets
 ALL_C_BINS = $(BIN_DIR)/mediator_mock $(BIN_DIR)/pt5_example $(BIN_DIR)/reference_tfmbs $(BIN_DIR)/test_device $(BIN_DIR)/mock_llama $(BIN_DIR)/test_dynamic_detection $(BIN_DIR)/test_phase10
-ALL_LIBS = $(BIN_DIR)/libtfmbs_device.so $(BIN_DIR)/libtfmbs_intercept.so
+ALL_LIBS = $(BIN_DIR)/libtfmbs_device$(SHLIB_EXT) $(BIN_DIR)/libtfmbs_intercept$(SHLIB_EXT)
 ALL_HW_SIM = $(BIN_DIR)/fabric_tb.vvp
 
 all: directories $(ALL_LIBS) $(ALL_C_BINS) python_ext hw_sim
@@ -31,11 +49,11 @@ directories:
 	mkdir -p $(BIN_DIR)
 
 # --- Shared Libraries ---
-$(BIN_DIR)/libtfmbs_device.so: $(SRC_DIR)/libtfmbs_device.c $(SRC_DIR)/fabric_emulator.c $(SRC_DIR)/tfmbs_driver_mock.c
-	$(CC) $(CFLAGS) -fPIC -shared -o $@ $^
+$(BIN_DIR)/libtfmbs_device$(SHLIB_EXT): $(SRC_DIR)/libtfmbs_device.c $(SRC_DIR)/fabric_emulator.c $(SRC_DIR)/tfmbs_driver_mock.c
+	$(CC) $(CFLAGS) -fPIC $(LDFLAGS_SHARED) -o $@ $^
 
-$(BIN_DIR)/libtfmbs_intercept.so: $(SRC_DIR)/libtfmbs_intercept.c $(BIN_DIR)/libtfmbs_device.so
-	$(CC) $(CFLAGS) -fPIC -shared -o $@ $< -L$(BIN_DIR) -ltfmbs_device -ldl
+$(BIN_DIR)/libtfmbs_intercept$(SHLIB_EXT): $(SRC_DIR)/libtfmbs_intercept.c $(BIN_DIR)/libtfmbs_device$(SHLIB_EXT)
+	$(CC) $(CFLAGS) -fPIC $(LDFLAGS_SHARED) -o $@ $< -L$(BIN_DIR) -ltfmbs_device $(LDLIBS_DL)
 
 # --- C Tools & Examples ---
 $(BIN_DIR)/mediator_mock: $(SRC_DIR)/mediator_mock.c
@@ -47,7 +65,7 @@ $(BIN_DIR)/pt5_example: $(EX_DIR)/pt5_pack_example.c
 $(BIN_DIR)/reference_tfmbs: $(SRC_DIR)/reference_tfmbs.c
 	$(CC) $(CFLAGS) -o $@ $<
 
-$(BIN_DIR)/test_device: tests/test_device.c $(BIN_DIR)/libtfmbs_device.so
+$(BIN_DIR)/test_device: tests/test_device.c $(BIN_DIR)/libtfmbs_device$(SHLIB_EXT)
 	$(CC) $(CFLAGS) -o $@ $< -L$(BIN_DIR) -ltfmbs_device
 
 $(BIN_DIR)/mock_llama: tests/mock_llama.c
@@ -61,7 +79,7 @@ $(BIN_DIR)/test_phase10: tests/test_phase10.c $(SRC_DIR)/tfmbs_driver_mock.c $(S
 
 run_mock_llama: $(BIN_DIR)/mock_llama $(ALL_LIBS)
 	export FABRIC_SHORT_CIRCUIT=1; \
-	LD_LIBRARY_PATH=$(BIN_DIR) LD_PRELOAD=$(BIN_DIR)/libtfmbs_intercept.so ./$(BIN_DIR)/mock_llama
+	$(LIBPATH_ENV)=$(BIN_DIR) $(PRELOAD_ENV)=$(BIN_DIR)/libtfmbs_intercept$(SHLIB_EXT) ./$(BIN_DIR)/mock_llama
 
 # --- Python Bindings (Phase 4) ---
 python_ext:
@@ -77,7 +95,7 @@ run_sim: $(BIN_DIR)/fabric_tb.vvp
 # --- Verilator Benchmark Target ---
 benchmark_hw:
 	mkdir -p $(BIN_DIR)
-	$(VERILATOR) $(VERILATOR_FLAGS) --trace --exe tests/bench_top.cpp --build -j `sysctl -n hw.ncpu` -o v_bench_binary
+	$(VERILATOR) $(VERILATOR_FLAGS) --trace --exe tests/bench_top.cpp --build -j $(NPROC) -o v_bench_binary
 	cp $(OBJ_DIR)/v_bench_binary $(BIN_DIR)/v_bench
 	@echo "🔥 Hardware Compiled. Running Benchmark..."
 	./$(BIN_DIR)/v_bench
@@ -88,7 +106,7 @@ profile:
 	mkdir -p $(BIN_DIR)
 	@echo "🚀 Compiling Optimized Headless Model (No Traces)..."
 	$(VERILATOR) $(VERILATOR_FLAGS) --exe tests/bench_top.cpp \
-		-CFLAGS "-DHEADLESS=1" --build -j `sysctl -n hw.ncpu` -o v_profile_binary
+		-CFLAGS "-DHEADLESS=1" --build -j $(NPROC) -o v_profile_binary
 	cp $(OBJ_DIR)/v_profile_binary $(BIN_DIR)/v_profile
 	@$(PYTHON) tests/profile_throughput.py
 
