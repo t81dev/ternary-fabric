@@ -1,6 +1,6 @@
 # 00: Project Overview
 
-The **Ternary Fabric** is a high-performance co-processor designed to accelerate AI and signal processing workloads by utilizing **Balanced Ternary** arithmetic. By moving beyond traditional binary logic, the fabric eliminates the need for expensive hardware multipliers and enables massive energy savings through data-aware optimizations.
+**Ternary Fabric** is a high-performance co-processor designed to accelerate AI and signal processing workloads by utilizing **Balanced Ternary** arithmetic. By moving beyond traditional binary logic, the fabric eliminates the need for expensive hardware multipliers and enables massive energy savings through data-aware optimizations.
 
 ## 1. Core Innovation
 
