@@ -45,7 +45,26 @@ results = fabric.results(0)
 print(f"Result for Lane 0: {results[0]}")
 ```
 
-## 2. Running the Full Example
+## 2. Advanced: PyTorch & GGUF
+For modern workloads, use the high-level `pytfmbs` integrations.
+
+### PyTorch Integration
+```python
+from pytfmbs import TFMBSLinear
+import torch
+
+model = TFMBSLinear(784, 60) # Accelerated Linear Layer
+output = model(torch.randn(1, 784))
+```
+
+### Loading GGUF Models
+```python
+import pytfmbs
+fabric = pytfmbs.Fabric()
+pytfmbs.load_gguf_tensor(fabric, "model.gguf", "blk.0.attn_q.weight", address=0x1000)
+```
+
+## 3. Running the Full Example
 A complete, executable version of this walkthrough is available in the repository:
 
 ```bash

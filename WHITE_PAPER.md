@@ -49,11 +49,13 @@ Ternary Fabric sits at the intersection of Ternary Neural Networks (TNNs) and do
 *   **MIT Eyeriss:** A research-focused spatial accelerator that prioritizes data movement efficiency. Like the Ternary Fabric, it values energy efficiency but remains centered on binary-encoded weights.
 *   **AMD XDNA (AI Engine):** A tile-based architecture for Ryzen processors. XDNA offers high flexibility, but the Ternary Fabric's specialization in balanced-ternary allows for the complete elimination of multipliers, a step further in architectural optimization.
 
-## 5. Future Directions & Experimental Kernels
-With the core multi-tile architecture (Phase 6b) now validated, the project is expanding into complex recurrent and attention-based structures. Current experimental kernels include **T-LSTM** and **T-Attention**, which are undergoing functional verification in the software reference layer before being committed to RTL.
+## 5. Framework Integration & Native Kernels
+As of Phase 15, the Ternary Fabric has achieved deep integration with high-level frameworks like PyTorch and native hardware acceleration for complex structures.
+- **PyTorch Integration:** The `TFMBSLinear` module enables seamless acceleration of deep learning models with automatic quantization and residency management.
+- **Native RTL Kernels:** Recurrent and attention-based structures, including **T-LSTM**, **T-Attention**, and **T-CONV3D**, are now natively supported in hardware, providing extreme throughput for diverse AI workloads.
 
 ## 6. Conclusion
-The Ternary Fabric provides a scalable, efficient, and high-throughput substrate for the next generation of ternary-quantized neural networks. The successful implementation of Phase 6b demonstrates that ternary-native computing can scale to meet the demands of modern AI while maintaining a fraction of the power and area overhead of binary systems.
+The Ternary Fabric provides a scalable, efficient, and high-throughput substrate for the next generation of ternary-quantized neural networks. The successful completion of Phase 15 demonstrates that ternary-native computing can scale to meet the demands of modern AI, from LLMs to computer vision, while maintaining a fraction of the power and area overhead of binary systems.
 
 ---
 © 2026 Ternary Fabric Project.

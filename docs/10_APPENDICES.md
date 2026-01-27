@@ -32,6 +32,11 @@ The fabric has been validated against several benchmarks. Detailed logs and repo
     *   **LRU Paging:** Verified via `tests/test_paging.c`, confirming zero leaks and correct eviction order.
     *   **Async Execution:** Confirmed race-free operation between background worker and host interposer.
     *   **Telemetry:** Cross-validated Zero-Skip metrics against software reference counters.
+*   **Phase 10-15 Report:** IOCTL interface, PyTorch/GGUF integration, and Native RTL kernels.
+    *   **UAPI:** Verified bit-exactness of `TFMBS_IOC_SUBMIT` against software HAL.
+    *   **PyTorch:** Validated `TFMBSLinear` parity with `torch.nn.Linear` using random ternary weights.
+    *   **GGUF:** Successful loading and execution of Q4_0 quantized tensors from standard GGUF files.
+    *   **Native Kernels:** 100% functional coverage for T-CONV3D, T-LSTM, and T-Attention RTL.
 *   **Regression Suite:** `pytest tests/` contains the latest functional validation tests.
 
 ## D. Architecture Diagrams (Full-Scale)

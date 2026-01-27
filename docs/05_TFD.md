@@ -55,10 +55,10 @@ Bits  | Name           | Description
 | `0x03` | `MUL` | Element-wise multiplication (Result is not accumulated). |
 | `0x04` | `CONV2D`| 2D Convolution (Uses stride/pad hints). |
 | `0x05` | `MAXPOOL`| Ternary Max Pooling. |
-| `0x06` | `TGEMM` | Matrix multiplication (Optimized accumulation). |
-| `0x07` | `CONV3D`| 3D Convolution (Experimental). |
-| `0x08` | `LSTM`  | Ternary LSTM (Experimental). |
-| `0x09` | `ATTN`  | Ternary Attention (Experimental). |
+| `0x06` | `TGEMM` | Matrix multiplication (Native RTL). |
+| `0x07` | `CONV3D`| 3D Convolution (Native RTL). |
+| `0x08` | `LSTM`  | Ternary LSTM (Native RTL). |
+| `0x09` | `ATTN`  | Ternary Attention (Native RTL). |
 
 ## 5. Packing Formats (`packing_fmt`)
 

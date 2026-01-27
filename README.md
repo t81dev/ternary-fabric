@@ -62,7 +62,7 @@ export FABRIC_SHORT_CIRCUIT=1
 LD_PRELOAD=./libtfmbs_intercept.so ./llama-cli -m model.gguf
 ```
 
-### Telemetry Insights (Phase 9)
+### Telemetry Insights
 ```text
 [TFMBS-Telemetry] GEMV Completed
   - Zero-Skips: 172,401 (65.8% reduction in total operations)
@@ -74,10 +74,11 @@ LD_PRELOAD=./libtfmbs_intercept.so ./llama-cli -m model.gguf
 
 ## 🏗️ Project State & Architecture
 
-The project is currently in **Phase 11**, offering a high-fidelity software emulator and **ASIC-ready synthesizable RTL**.
+The project is currently in **Phase 15**, offering deep integration with PyTorch and GGUF, alongside native hardware acceleration for advanced kernels.
 
-*   **Software Layer (Emulation):** Multi-tile scaling, kernel-style IOCTLs, LRU-based paging, and transparent `LD_PRELOAD` interposer.
-*   **Hardware Layer (RTL):** Parameterized Multi-Tile SIMD architecture with AXI4-Lite control plane and Zero-Skip TPE lanes.
+*   **Framework Layer:** Transparent PyTorch integration via `TFMBSLinear`, supporting automatic quantization and weight residency.
+*   **Software Layer (Emulation):** High-fidelity multi-tile emulator with IOCTL support (`/dev/tfmbs`), GGUF v2/v3 parsing, and transparent `LD_PRELOAD` interposer.
+*   **Hardware Layer (RTL):** ASIC-ready synthesizable RTL with native support for T-GEMM, T-CONV3D, T-LSTM, and T-Attention kernels.
 
 | Configuration | Lanes | Clock | Throughput (Peak) |
 | :--- | :--- | :--- | :--- |

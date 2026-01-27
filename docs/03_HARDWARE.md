@@ -68,6 +68,11 @@ Since trits are restricted to $\{-1, 0, 1\}$, multiplication is trivial:
 *   If both are non-zero and have the same sign, the result is $+1$ (Increment Accumulator).
 *   If they have different signs, the result is $-1$ (Decrement Accumulator/Two's Complement).
 
+### Native Kernel Support (Phase 15)
+The Vector Engine includes specialized logic for advanced kernels:
+*   **Squared-Stride Addressing (CONV3D):** Automatic offset calculation for 3D spatial traversal.
+*   **State Persistence (LSTM/ATTN):** When the `BIAS_EN` hint is set, the accumulator persists its value across frame descriptors, enabling efficient recurrent and attention-based state management.
+
 ## 4. Pipeline Execution Flow
 
 1.  **Submission:** The Host writes a TFD to the AXI registers.

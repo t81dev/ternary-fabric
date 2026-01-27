@@ -40,45 +40,36 @@ The primary workload for llama.cpp acceleration.
 - **Semantics:** Performs $y = Wx$, where $W$ is ternary, $x$ is typically binary/FP (quantized to ternary by the fabric if necessary), and $y$ is binary (accumulated results).
 
 ### 3.2 Async vs Sync
-- The interface supports both synchronous (blocking) and asynchronous (polling/interrupt) execution.
-- `fabric_exec_gemv` initiates the operation.
-- Completion is signalled via a status register or callback.
+- The interface supports both synchronous (blocking) and asynchronous (polling/interrupt) execution via IOCTL.
+- `TFMBS_IOC_SUBMIT` initiates the operation using a TFD.
+- `TFMBS_IOC_WAIT` blocks until completion.
+- Completion can also be polled via the `DONE` bit in the control register.
 
 ---
 
-## 4. Host API (C ABI)
+## 4. Host API (UAPI / IOCTL)
 
-The following functions define the standard interface for the Fabric Device:
+The normative interface for the Fabric Device is mediated via the `/dev/tfmbs` character device using the following IOCTLs:
 
 ```c
 /**
- * Allocate memory in the Fabric pool.
- * Returns a handle/pointer to Fabric-resident memory.
+ * Submit a Ternary Frame Descriptor for execution.
+ * Returns a unique task_id.
  */
-void* fabric_alloc(size_t size);
+#define TFMBS_IOC_SUBMIT _IOW(TFMBS_IOC_MAGIC, 1, tfmbs_tfd_t)
 
 /**
- * Free memory in the Fabric pool.
+ * Block until the specified task is complete.
  */
-void fabric_free(void* ptr);
+#define TFMBS_IOC_WAIT _IOW(TFMBS_IOC_MAGIC, 2, uint32_t)
 
 /**
- * Copy data from Host RAM to Fabric Memory.
- * Handles automatic PT-5 packing if requested.
+ * Submit a GEMV operation directly (Optimized path).
  */
-int fabric_memcpy_to(void* dest_fabric, const void* src_host, size_t size, int pack_pt5);
-
-/**
- * Copy data from Fabric Memory to Host RAM.
- * Handles automatic PT-5 unpacking if requested.
- */
-int fabric_memcpy_from(void* dest_host, const void* src_fabric, size_t size, int unpack_pt5);
-
-/**
- * Execute a Ternary General Matrix-Vector multiplication.
- */
-int fabric_exec_gemv(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols);
+#define TFMBS_IOC_SUBMIT_GEMV _IOW(TFMBS_IOC_MAGIC, 3, tfmbs_gemv_t)
 ```
+
+For high-level languages, the `pytfmbs` library provides a Pythonic wrapper around these low-level calls.
 
 ---
 
