@@ -20,15 +20,16 @@ To save bandwidth, data is stored in a high-density **PT-5** format (5 trits per
 ### Multi-Tile Scalability
 The architecture is parameterized to scale from a single tile to a large matrix of tiles. Each tile operates in lock-step, sharing a frame controller but maintaining private SRAM for local data storage and high-throughput parallel execution.
 
-## 3. Project Status (Phase 9)
+## 3. Project Status (Phase 6b)
 
-The project has reached the **Transparent Acceleration** milestone (Phase 9), enabling zero-patch integration with binary applications:
+The project has evolved through several key phases:
 
-*   **Phases 1-5:** Development of the core RTL, PT-5 codec, and initial "Fabric Illusion" compute offloading.
-*   **Phase 6:** Multi-tile scaling, broadcast weight support, and verification of **Zero-Skip** efficiency (~64-76%).
-*   **Phase 7:** Implementation of **LRU-based Paging & Eviction**, allowing models larger than the physical Fabric memory pool to be executed transparently.
-*   **Phase 8:** Introduction of **Asynchronous Pipelining**, utilizing a background worker thread to overlap host processing with Fabric execution.
-*   **Phase 9 (Current):** Integration of real-time **Telemetry & Performance** dashboards, providing visibility into skip rates, pool usage, and async queue status.
+*   **Phases 1-2:** Specification of the TFMBS ABI and development of the PT-5 codec.
+*   **Phase 3:** RTL design of the Vector Engine and TPE lanes.
+*   **Phase 4:** Integration with Python via `pytfmbs` and development of the quantization toolkit.
+*   **Phase 5:** Implementation of hardware profiling counters and dynamic lane masking.
+*   **Phase 6a:** Extension of the kernel library (T-CONV, T-POOL) and DMA support.
+*   **Phase 6b (Current):** Multi-tile scaling, broadcast weight support, and ASIC-ready SRAM wrappers. This phase marks the **production-core** readiness of the multi-tile fabric.
 
 ## 4. Experimental Kernels
 

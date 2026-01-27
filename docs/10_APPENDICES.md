@@ -28,10 +28,6 @@ The fabric has been validated against several benchmarks. Detailed logs and repo
 
 *   **Phase 5 Report:** Verification of Zero-Skip and T-GEMM results (See `archive/PHASE_5_REPORT.md`).
 *   **Phase 6b Report:** Multi-tile scaling and FPGA synthesis estimates (See `docs/validation/phase6b/report.md`).
-*   **Phase 7-9 Summary:**
-    *   **LRU Eviction (Phase 7):** Verified using 256MB model on 128MB Fabric pool. LRU counters correctly identified and evicted the least-used 32MB block.
-    *   **Async Correctness (Phase 8):** Validated by comparing `mock_llama` output against golden CPU-only reference. Race conditions avoided via `mprotect`-based wait states.
-    *   **Telemetry (Phase 9):** Performance counters verified to match instruction-level simulation with <1% error margin.
 *   **Regression Suite:** `pytest tests/` contains the latest functional validation tests.
 
 ## D. Architecture Diagrams (Full-Scale)
