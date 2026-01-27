@@ -16,13 +16,12 @@ All contributions must adhere to the **Binary Sovereignty** principle:
 * **Kernel Prototyping:** We prioritize **ML Research**. New kernels (e.g., T-LSTM, T-Attention) must first be implemented as a Python reference script in `tools/`.
 * **Benchmarking:** All new features should include a corresponding benchmark in `tools/benchmark_suite.py` to quantify performance gains.
 * **Python Bindings:** New hardware features must be exposed via the `pytfmbs` C-extension to ensure accessibility for the AI research community.
-* **Acceleration Layer:** Contributions to the interposer (`libtfmbs_intercept.so`) must maintain compatibility with `llama.cpp` and support existing `LD_PRELOAD` workflows.
 
 ## 3. RTL & Hardware Engineers (Verilog)
 
 As we move toward high-density synthesis, hardware contributions must prioritize efficiency:
 
-* **SIMD Modularity:** Design components at the **Lane** and **Tile** levels. Logic should be tileable to allow the fabric to scale multi-tile (Phase 6+) and lanes to scale from 1 to 256+.
+* **SIMD Modularity:** Design components at the **Lane** and **Tile** levels. Logic should be tileable to allow the fabric to scale multi-tile (Phase 6b) and lanes to scale from 1 to 256+.
 * **Zero-Skip Enforcement:** RTL must implement operand isolation or clock gating for `00` (zero) trits. Contributions that do not demonstrate power-saving potential on sparse data will be scrutinized.
 * **PT-5 Compliance:** All data ingestors must use the `pt5_unpacker` hydration logic to maintain 95% bus efficiency.
 * **Synthesis Aware:** Avoid vendor-specific primitives; use behavioral wrappers where possible to maintain ASIC/FPGA portability.
@@ -40,7 +39,7 @@ To add a new mathematical operation to the fabric:
 1. **Fork** and **Branch** (`feature/your-feature`).
 2. **Regression Check:** Run `pytest tests/` and `./test_suite.sh`.
 3. **Hardware Check:** Ensure `make run_sim` passes with 0 errors.
-4. **PR:** Link your pull request to the relevant phase in `docs/ROADMAP.md`.
+4. **PR:** Link your pull request to the relevant phase in `ROADMAP.md`.
 
 ---
 
@@ -51,4 +50,3 @@ The **ternary-fabric** repository is now a high-velocity, full-stack development
 * **Software** can model and quantize.
 * **Hardware** can hydrate and execute.
 * **ABI** can bridge and govern.
-* **Acceleration** can offload and short-circuit (Phase 9).
