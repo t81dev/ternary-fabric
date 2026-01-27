@@ -43,7 +43,7 @@ While ARM NEON provides high absolute throughput for dense binary math, the Tern
 
 ## 4. Related Work
 
-The Ternary Fabric sits at the intersection of Ternary Neural Networks (TNNs) and domain-specific accelerators.
+Ternary Fabric sits at the intersection of Ternary Neural Networks (TNNs) and domain-specific accelerators.
 
 *   **Google TPU:** Utilizes large systolic arrays for 8-bit integer math. While highly efficient for dense GEMM, it lacks native support for ternary logic and doesn't exploit fine-grained sparsity to the same degree as the Fabric's Zero-Skip logic.
 *   **MIT Eyeriss:** A research-focused spatial accelerator that prioritizes data movement efficiency. Like the Ternary Fabric, it values energy efficiency but remains centered on binary-encoded weights.
