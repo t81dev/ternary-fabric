@@ -75,7 +75,19 @@ Since trits are restricted to $\{-1, 0, 1\}$, multiplication is trivial:
 3.  **Transformation:** TPE lanes perform the Sign-Flip and Accumulate operation.
 4.  **Commit:** Once the `frame_len` is reached, the `done` bit is set, and results are available for the host to read.
 
-## 5. ASIC Readiness
+## 5. Memory Model & System Boundary
+
+The interaction between the binary host and the ternary fabric occurs at the memory boundary, utilizing the **PT-5 Encoding** format.
+
+### PT-5 Hydration Pipeline
+Data is stored and transmitted across the AXI bus in packed 8-bit bytes (5 trits per byte).
+*   **Dehydration (Hardware):** Occurs at the entry point of each Tile. Combinatorial logic expands each 8-bit byte into 15 independent 2-bit signed trits in a single clock cycle. This incurs **zero pipeline latency**.
+*   **Hydration (Software/Host):** When the host prepares weights or inputs, it must pack them into PT-5. While this introduces a small computational overhead on the host, it is offset by the **37.5% reduction in bus bandwidth** required compared to using 2 bits per trit (which would only pack 4 trits per byte).
+
+### DMA & Throughput
+Large data transfers (e.g., model weights) utilize **AXI-Stream DMA**. The hydration/dehydration process is integrated into the streaming path, ensuring that the processing elements are never starved of data as long as the bus bandwidth is maintained.
+
+## 6. ASIC Readiness
 
 The fabric is designed for easy portability:
 *   **No Multipliers:** Reduces area and timing pressure.

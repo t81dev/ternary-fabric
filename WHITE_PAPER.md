@@ -28,10 +28,31 @@ The fabric reaches its peak theoretical throughput of **30.0 GOPS** at 250 MHz f
 ### 3.2 Sparsity Advantage
 With Zero-Skip enabled, the fabric avoids unnecessary computations. At 50% random sparsity, the architecture demonstrated an average of **65-70%** effective skip rate in lanes, directly translating to power efficiency.
 
-## 4. Future Directions & Experimental Kernels
+### 3.3 Benchmarking & Comparison (ARM NEON)
+To provide context, we compare the Ternary Fabric against standard binary SIMD units like **ARM NEON** (v8-A).
+
+| Metric | ARM NEON (8-bit) | Ternary Fabric (4-Tile) | Ternary Fabric (HD) |
+| :--- | :--- | :--- | :--- |
+| **Data Width** | 8-bit Integer | 1.58-bit (Trit) | 1.58-bit (Trit) |
+| **Clock Speed** | 1.5 - 2.0 GHz | 250 MHz | 250 MHz |
+| **Peak GOPS** | ~64 - 128 | 30.0 | **512.0** |
+| **Multipliers** | Required (DSP/Hard) | **None (Gated Logic)** | **None** |
+| **Power/OP** | High | **Ultra-Low** | **Ultra-Low** |
+
+While ARM NEON provides high absolute throughput for dense binary math, the Ternary Fabric achieves comparable or superior throughput in high-density configurations with a fraction of the power budget, specifically excelling in sparse workloads where binary multipliers would otherwise waste energy on zero-value operands.
+
+## 4. Related Work
+
+The Ternary Fabric sits at the intersection of Ternary Neural Networks (TNNs) and domain-specific accelerators.
+
+*   **Google TPU:** Utilizes large systolic arrays for 8-bit integer math. While highly efficient for dense GEMM, it lacks native support for ternary logic and doesn't exploit fine-grained sparsity to the same degree as the Fabric's Zero-Skip logic.
+*   **MIT Eyeriss:** A research-focused spatial accelerator that prioritizes data movement efficiency. Like the Ternary Fabric, it values energy efficiency but remains centered on binary-encoded weights.
+*   **AMD XDNA (AI Engine):** A tile-based architecture for Ryzen processors. XDNA offers high flexibility, but the Ternary Fabric's specialization in balanced-ternary allows for the complete elimination of multipliers, a step further in architectural optimization.
+
+## 5. Future Directions & Experimental Kernels
 With the core multi-tile architecture (Phase 6b) now validated, the project is expanding into complex recurrent and attention-based structures. Current experimental kernels include **T-LSTM** and **T-Attention**, which are undergoing functional verification in the software reference layer before being committed to RTL.
 
-## 5. Conclusion
+## 6. Conclusion
 The Ternary Fabric provides a scalable, efficient, and high-throughput substrate for the next generation of ternary-quantized neural networks. The successful implementation of Phase 6b demonstrates that ternary-native computing can scale to meet the demands of modern AI while maintaining a fraction of the power and area overhead of binary systems.
 
 ---

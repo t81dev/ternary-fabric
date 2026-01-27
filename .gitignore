@@ -64,7 +64,7 @@ Thumbs.db
 .idea/
 
 # --- Exceptions: Don't ignore your own source .so or key files ---
-!src/pytfmbs/*.so     # keep the Python extension
+# !src/pytfmbs/*.so     # DO NOT keep the Python extension (build from source)
 !tests/*.cpp          # your hand-written testbench .cpp
 !tests/*.h            # if you add any
 !src/libtfmbs_*.c     # your interposer libs (even if .c, for consistency)
