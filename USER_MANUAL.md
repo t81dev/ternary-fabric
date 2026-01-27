@@ -26,7 +26,11 @@ Welcome to the **Ternary Fabric** user manual. This documentation is designed to
     Step-by-step guides for quantization, multi-tile scaling, and DMA loading.
 11. **[Appendices](docs/10_APPENDICES.md)**
     Acronyms, PT-5 details, and Phase 6b verification reports.
-12. **[Strategy Roadmap](docs/ROADMAP.md)**
+12. **[Multi-Tile Scaling](docs/11_MULTI_TILE.md)**
+    Details on Phase 11 multi-tile topology and masking.
+13. **[PyTorch Integration](docs/12_PYTORCH.md)**
+    Using the Ternary Fabric within the PyTorch deep learning framework.
+14. **[Strategy Roadmap](docs/ROADMAP.md)**
     The project roadmap detailing completed and future phases.
 
 ---
