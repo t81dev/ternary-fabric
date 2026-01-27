@@ -86,7 +86,7 @@ def pack_gemv_weights(w_ternary):
 
 class TFMBSLinearFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, input, fabric, weight_addr, bias, in_features, out_features, tile_mask):
+    def forward(ctx, input, fabric, weight_addr, bias, in_features, out_features, tile_mask, next_layer=None):
         # input: [batch, in_features]
         # input must be quantized to {-1, 0, 1} for the fabric
         x_ternary = torch.sign(input).to(torch.int8).cpu().numpy()
@@ -102,7 +102,7 @@ class TFMBSLinearFunction(torch.autograd.Function):
                 if tile_mask & (1 << t):
                     fabric.load(SRAM_BANK_B_OFFSET + t * SRAM_TILE_STRIDE, packed_x)
 
-            # Run
+            # Run asynchronously
             tfd = {
                 "base_addr": weight_addr,
                 "depth": in_features,
@@ -110,7 +110,14 @@ class TFMBSLinearFunction(torch.autograd.Function):
                 "tile_mask": tile_mask,
                 "exec_hints": KERNEL_T_GEMM | HINT_ZERO_SKIP,
             }
-            fabric.run(tfd)
+            fabric.submit(tfd)
+
+            # PIPELINING: Overlap weight loading for the next layer with current execution
+            if i == batch_size - 1 and next_layer is not None:
+                 next_layer.prefetch()
+
+            # Explicit wait for completion
+            fabric.wait()
 
             # Results
             all_res = fabric.results(-1)
@@ -127,9 +134,7 @@ class TFMBSLinearFunction(torch.autograd.Function):
         Backward pass currently returns the gradient with respect to input.
         Weights are not updated through the fabric in this version (Inference only).
         """
-        # Straight-through estimator or similar could be used for training.
-        # For now, we return None for parameters not being trained via Fabric.
-        return grad_output, None, None, None, None, None, None
+        return grad_output, None, None, None, None, None, None, None
 
 class TFMBSLinear(nn.Module):
     """
@@ -160,23 +165,50 @@ class TFMBSLinear(nn.Module):
             bound = 1 / np.sqrt(fan_in)
             nn.init.uniform_(self.bias, -bound, bound)
 
-    def load_to_fabric(self):
-        """Quantizes and moves weights to Fabric memory."""
+    def prefetch(self, addr=None):
+        """Quantizes and moves weights to Fabric memory ahead of time."""
+        if self.resident:
+            return
+
+        if addr is not None:
+            self.weight_addr = addr
+
         w_ternary = torch.sign(self.weight).to(torch.int8).detach().cpu().numpy()
         tile_data = pack_gemv_weights(w_ternary)
 
         for t, data in enumerate(tile_data):
             if data is not None:
-                # Load to Bank A of tile t
-                self.fabric.load(SRAM_BANK_A_OFFSET + t * SRAM_TILE_STRIDE, data)
+                # Load to weight bank of tile t
+                self.fabric.load(self.weight_addr + t * SRAM_TILE_STRIDE, data)
 
         self.resident = True
 
-    def forward(self, input):
+    def load_to_fabric(self):
+        """Deprecated alias for prefetch() using default address."""
+        self.prefetch()
+
+    def forward(self, input, next_layer=None):
         if not self.resident:
             self.load_to_fabric()
 
         return TFMBSLinearFunction.apply(
             input, self.fabric, self.weight_addr, self.bias,
-            self.in_features, self.out_features, self.tile_mask
+            self.in_features, self.out_features, self.tile_mask, next_layer
         )
+
+class TFMBSSequential(nn.Sequential):
+    """
+    A Sequential container that automatically handles layer pipelining.
+    """
+    def forward(self, input):
+        for i, module in enumerate(self):
+            # Only pass next_layer if it is a TFMBSLinear instance to avoid AttributeErrors
+            next_module = self[i+1] if i+1 < len(self) else None
+            if not isinstance(next_module, TFMBSLinear):
+                next_module = None
+
+            if isinstance(module, TFMBSLinear):
+                input = module(input, next_layer=next_module)
+            else:
+                input = module(input)
+        return input

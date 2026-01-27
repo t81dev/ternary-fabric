@@ -112,10 +112,11 @@ Bring "Fabric Illusion" to high-level deep learning frameworks.
 *   **Deliverable:** `src/pytfmbs/torch.py` and `TFMBSLinear` module.
 *   **Features:** Custom `torch.autograd` functions for Fabric offload, automatic weight quantization, and residency management.
 
-### Phase 13 — Large-Model Support & Multi-Layer Batching 📅
+### Phase 13 — Large-Model Support & Multi-Layer Batching ✅
 Optimizing for models exceeding 70B+ parameters.
-*   Advanced prefetching strategies for PT-5 frames.
-*   Batched execution of multiple layers to hide DMA latency.
+*   **Status:** Complete.
+*   **Deliverable:** `TFMBSSequential`, `prefetch()` API, and `run_batch` in `pytfmbs`.
+*   **Features:** Asynchronous `submit`/`wait`, multi-layer pipelining, and double-buffering support.
 
 ### Phase 14 — GGUF Model Optimizations 📅
 Deep integration with the GGUF file format and llama.cpp specific optimizations.
