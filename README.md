@@ -1,95 +1,134 @@
-### ternary-fabric
+# Ternary Fabric
 
-This repository defines a **ternary-native memory and interconnect fabric** designed to accelerate compression, signal processing, and AI workloads within binary-dominated systems.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+[![TFMBS Version](https://img.shields.io/badge/TFMBS-v0.1--draft-blue.svg)](include/tfmbs.h)
 
-Unlike traditional research that seeks to replace binary CPUs, this fabric operates as a **specialized data plane** (execution adjacency) attached to a binary host, utilizing balanced-ternary semantics () to eliminate multiplication overhead and enable **Zero-Skip** hardware optimizations.
-
----
-
-### 🏗️ Architecture at a Glance
-
-The **Ternary Fabric Memory & Bus Specification (TFMBS)** is built on three pillars:
-
-1. **Binary Sovereignty:** The host CPU manages task scheduling via **Ternary Frame Descriptors (TFDs)** over an AXI4-Lite control plane.
-2. **Vectorized SIMD:** Hardware-native logic tiles **Ternary Processing Elements (TPEs)** into parallel lanes for massive throughput.
-3. **Hydrated Frames:** Data is stored in **PT-5** (5 trits per byte) for 95.1% storage efficiency but "hydrated" into 2-bit signed logic for execution.
+The **Ternary Fabric** is a ternary-native memory and interconnect co-processor designed to accelerate AI and signal processing workloads. It operates as an **execution adjacency** to a binary host, utilizing balanced-ternary semantics ({-1, 0, 1}) to eliminate multiplication overhead and enable fine-grained hardware optimizations.
 
 ---
 
-### 📊 Performance Metrics (Calculated)
+## 🌟 Key Features & Highlights
+
+*   **Multi-Tile Scaling:** Parameterized architecture (default **4 tiles**) with private SRAMs and a shared global frame controller.
+*   **Vectorized SIMD:** Each tile features **15 parallel TPE lanes**, providing high-throughput hydration and execution.
+*   **Hardware Optimizations:**
+    *   **Zero-Skip:** Suppresses clock toggling when operands are zero, reducing dynamic power.
+    *   **Free-Negation:** Zero-cost sign-flipping for weights/inputs.
+    *   **Weight Broadcast:** Efficient multi-tile weight distribution for GEMM and CONV kernels.
+*   **Hydrated Frames:** Data is stored in **PT-5** format (5 trits per byte) for **95.1% storage efficiency** and hydrated into 2-bit signed logic during execution.
+*   **Rich Kernel Library:** Hardware-native support for **T-GEMM**, **T-CONV2D**, **T-MAXPOOL**, and **T-DOT**.
+*   **ASIC Ready:** Uses behavioral SRAM wrappers and standard AXI4-Lite interfaces, ready for synthesis in advanced process nodes.
+
+---
+
+## 🚀 Quick Start
+
+The fastest way to get started is using the Python API.
+
+1.  **Build the Python Extension:**
+    ```bash
+    make python_ext
+    ```
+
+2.  **Run an Example:**
+    Explore the `examples/` directory for common use cases:
+    ```bash
+    # Basic T-GEMM operation
+    python3 examples/quick_start.py
+
+    # Multi-tile and weight broadcast demo
+    python3 examples/multi_tile_tgemm.py
+
+    # Profiling Zero-Skip effectiveness
+    python3 examples/profiling_example.py
+    ```
+
+For detailed setup instructions, see **[Installation & Setup](docs/01_INSTALL.md)**.
+
+---
+
+## 🏗️ Architecture Summary
+
+### Multi-Tile Topology
+The fabric scales by tiling independent processing units that operate in lock-step via a shared Frame Controller.
+
+```text
+       AXI4-Lite Control Plane / AXI-Stream DMA
+                  |
+        +---------V------------------+
+        |     Frame Controller       | (Global Control)
+        +---------|------------------+
+                  | (Shared Control Bus: Start, Op, Stride)
+        +---------+---------+---------+---------+
+        |         |         |         |         |
+    +---V---+ +---V---+ +---V---+ +---V---+     |
+    | Tile 0| | Tile 1| | Tile 2| | Tile 3| ... | (NUM_TILES=4)
+    +-------+ +-------+ +-------+ +-------+     |
+        |         |         |         |         |
+        +---------+---------+---------+---------+
+                  |
+        (Aggregated Vector Results / Counters)
+```
+
+### The TPE Lane (Processing Element)
+Each lane replaces power-hungry binary multipliers with simple gating and sign-flip logic.
+
+```text
+Weight (2b) --+       Input (2b) --+
+              |                    |
+        +-----V--------------------V-----+
+        |       Zero-Skip Logic          | (Clock Gate)
+        +-----|--------------------|-----+
+              |                    |
+        +-----V--------------------V-----+
+        |       Sign-Flip Logic          | (Inverter)
+        +-----|--------------------|-----+
+              |                    |
+        +-----V--------------------V-----+
+        |       32-bit Accumulator       |
+        +--------------------------------+
+```
+
+---
+
+## 📊 Performance Metrics
 
 The Ternary Fabric achieves extreme throughput by leveraging the zero-cost nature of ternary multiplication.
 
-#### ⚡ Theoretical Throughput
+| Configuration | Lanes | Clock | Throughput (Peak) |
+| :--- | :--- | :--- | :--- |
+| **Per Tile** | 15 | 250 MHz | **7.5 GOPS** |
+| **Aggregated Fabric (4 Tiles)** | 60 | 250 MHz | **30.0 GOPS** |
+| **Projected (High-Density)** | 1024 | 250 MHz | **512.0 GOPS** |
 
-Given a target FPGA clock of **250 MHz** and the current **15-lane** SIMD configuration:
-
-* **Ops per Cycle:** 
-* **Peak Throughput:**  (Giga-Operations Per Second).
-* **Scaling:** Because TPE lanes are extremely small (no hardware multipliers), scaling to **1024 lanes** on a mid-range FPGA yields **512 GOPS** at significantly lower power than binary INT8.
-
-#### 🔋 Energy Efficiency (Zero-Skip)
-
-Unlike binary accelerators, the TPE lanes utilize **Zero-Skip Logic**:
-
-* If either weight or input is `0`, the accumulator's clock-enable is suppressed.
-* **Result:** Dynamic power consumption scales with data sparsity, perfect for sparse LLMs.
+*Note: 1 MAC (Multiply-Accumulate) is counted as 2 Operations. GOPS = Giga-Operations Per Second.*
 
 ---
 
-### 📂 Repository Structure
+## 📖 Documentation
 
-* `specs/`: Normative definitions for the Frame Model, Memory Bus, and AI Acceleration.
-* `include/`: `tfmbs.h`—The C ABI and single source of truth for the fabric.
-* `src/hw/`: Synthesizable Verilog RTL for the TPEs, Vector Engine, and AXI Interconnect.
-* `src/pytfmbs/`: Python C-Extensions for hardware-level control.
-* `tests/`: Verilator-based C++ testbenches for cycle-accurate hardware validation.
-* `tools/`: Python utilities for **Quantization**, **PT-5 Packing**, and **Ternary Hex Dumps**.
+*   **[User Manual](USER_MANUAL.md):** The central landing page for all documentation.
+*   **[TFMBS Specification](specs/):** Normative definitions for the Frame Model and Bus.
+*   **[API Guide](docs/07_API.md):** Detailed documentation for the `pytfmbs` Python library.
+*   **[Hardware Guide](docs/03_HARDWARE.md):** Deep dive into RTL and architecture.
 
 ---
 
-### 🚀 Quick Start
+## 🛠️ Roadmap Status: Phase 6b Complete
 
-#### 1. Hardware-Native Toolchain
+We have successfully implemented and verified the multi-tile scaling architecture.
 
-Convert floating-point weights into ternary binary frames ready for the fabric:
-
-```bash
-# 1. Quantize weights to {-1, 0, 1}
-python3 tools/quantize.py my_weights.npy -o weights.txt
-
-# 2. Pack into PT-5 binary and generate TFD header
-python3 tools/ternary_cli.py weights.txt --lanes 15 --kernel 1
-
-# 3. Inspect the spatial mapping
-python3 tools/txd.py weights.txt.tfrm
-
-```
-
-#### 2. Cycle-Accurate Benchmark
-
-Verify the RTL using the Verilator-based hardware benchmark. This compiles the Verilog into a high-speed C++ executable to measure throughput:
-
-```bash
-# Compile and run the AXI-integrated hardware simulation
-make benchmark_hw
-
-```
+*   ✅ **Phase 1-4:** Specification, ABI, RTL, and AXI Integration.
+*   ✅ **Phase 5:** Kernel Extensions (T-CONV, T-POOL).
+*   ✅ **Phase 6a/b:** Multi-tile Scaling, Weight Broadcast, and Profiling API.
+*   📅 **Next Steps:** FPGA Deployment and TNN (Ternary Neural Network) model zoo integration.
 
 ---
 
-### 🗺️ Roadmap Status: **Phase 4: Integration**
+## 🤝 Contributing
 
-We have successfully bridged the gap between spec and silicon.
-
-* **Phase 1 & 2:** Complete (Specification, ABI, and Tooling).
-* **Phase 3 (Hardware):** Complete. RTL for TPEs, Vector Engine, and AXI-Lite Interconnect is verified.
-* **Phase 4 (Integration):** **Current.** Focus on `pyTFMBS` orchestration and real-world TNN inference.
+We welcome contributions! Please see **[CONTRIBUTING.md](CONTRIBUTING.md)** for our standards on ternary-native optimization and code quality.
 
 ---
-
-### 🤝 Contributing
-
-We welcome contributions from system architects and RTL engineers. Please see `CONTRIBUTING.md` for our standards on **Binary Sovereignty** and **Zero-Skip logic** optimization.
-
----
+© 2026 Ternary Fabric Project. All rights reserved.
