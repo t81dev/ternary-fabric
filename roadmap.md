@@ -31,15 +31,22 @@ This roadmap outlines the development phases for the Ternary Fabric Memory & Bus
 * [x] **Free Negation & Zero-Skip:** Implemented in RTL and supported by `pytfmbs`.
 * [x] **T-GEMM Kernel:** Multi-lane matrix multiplication kernel added to fabric.
 
-## Phase 5: End-to-End Workflow & Profiling (Current)
+## Phase 5: End-to-End Workflow & Profiling (Complete)
 
-* [ ] **End-to-End Inference:** Run complete `.tfrm` workloads from host to fabric.
-* [ ] **Performance Profiling:** Implement hardware counters for lane utilization and Zero-Skip effectiveness.
-* [ ] **Dynamic Lane Handling:** Support for per-lane bitmasking and partial-lane operations.
-* [ ] **T-GEMM Verification:** Validate hardware matrix operations against a C reference.
-* [ ] **Optional: DMA Loader:** Hardware-accelerated `.tfrm` streaming via AXI DMA.
+* [x] **End-to-End Inference:** Run complete `.tfrm` workloads from host to fabric.
+* [x] **Performance Profiling:** Implement hardware counters for lane utilization and Zero-Skip effectiveness.
+* [x] **Dynamic Lane Handling:** Support for per-lane bitmasking and partial-lane operations.
+* [x] **T-GEMM Verification:** Validate hardware matrix operations against a C reference.
+* [x] **Optional: DMA Loader:** Hardware-accelerated `.tfrm` streaming via AXI DMA.
 
-## Phase 6: Deployment & Scaling (Upcoming)
+## Phase 6a: Optimization & Extended Workloads (Complete)
+
+* [x] **Hardware DMA Loader:** AXI-based streaming of `.tfrm` files directly into fabric SRAM.
+* [x] **Extended Kernel Library:** Added T-CONV and T-POOL kernels to the fabric and mock.
+* [x] **Profiling Enhancements:** Per-lane counters (active cycles), overflow flags, and burst latency tracking.
+* [x] **End-to-End Regression Suite:** Automated `pytest` suite for kernel validation and counter verification.
+
+## Phase 6b: Deployment & Scaling (Upcoming)
 
 * [ ] **FPGA Validation:** Deploy on Xilinx/Intel FPGA to measure physical timing (Max Freq).
 * [ ] **Multi-Tile Scaling:** Expand `fabric_top.v` to support multiple vector engines.
@@ -58,6 +65,7 @@ This roadmap outlines the development phases for the Ternary Fabric Memory & Bus
 | `src/hw/ternary_fabric_top.v` | ✅ | Top-level AXI-integrated accelerator. |
 | `src/pytfmbs/core.c` | ✅ | C-Extension for Python-to-Hardware MMIO. |
 | `tests/bench_top.cpp` | ✅ | C++ Cycle-accurate hardware benchmark. |
+| `tests/test_phase6.py` | ✅ | Pytest-based Phase 6 regression suite. |
 | `Makefile` | ✅ | Orchestrates C, Python, and Verilog builds. |
 
 ---
