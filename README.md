@@ -128,15 +128,16 @@ The Ternary Fabric achieves extreme throughput by leveraging the zero-cost natur
 
 ---
 
-## 🛠️ Roadmap Status: Phase 6b Complete
+## 🛠️ Roadmap Status: Phase 6b Complete & llama.cpp Integration (Phases 0-2)
 
-We have successfully implemented and verified the multi-tile scaling architecture.
+We have successfully implemented multi-tile scaling and established the foundation for `llama.cpp` device-level acceleration.
 
 *   ✅ **Phase 1-4:** Specification, ABI, RTL, and AXI Integration.
 *   ✅ **Phase 5:** Kernel Extensions (T-CONV, T-POOL).
 *   ✅ **Phase 6a/b:** Multi-tile Scaling, Weight Broadcast, and Profiling API.
+*   ✅ **llama.cpp Integration (Phase 0-2):** Device Contract, Emulated Device (`libtfmbs_device.so`), and Memory Interposer (`libtfmbs_intercept.so`).
 *   🧪 **Experimental:** T-Conv3D, T-LSTM, and T-Attention kernels (Python reference).
-*   📅 **Next Steps:** FPGA Deployment and TNN (Ternary Neural Network) model zoo integration.
+*   📅 **Next Steps:** FPGA Deployment and llama.cpp Compute Interception (Phase 3+).
 
 ---
 

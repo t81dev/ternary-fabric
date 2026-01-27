@@ -26,6 +26,8 @@ Welcome to the **Ternary Fabric** user manual. This documentation is designed to
     Step-by-step guides for quantization, multi-tile scaling, and DMA loading.
 11. **[Appendices](docs/10_APPENDICES.md)**
     Acronyms, PT-5 details, and Phase 6b verification reports.
+12. **[llama.cpp Acceleration Roadmap](archive/llama.cpp_roadmap.md)**
+    Strategy for transparent device-level acceleration using Memory Interposition.
 
 ---
 
@@ -35,6 +37,7 @@ Check out the `examples/` directory for runnable scripts:
 *   `multi_tile_tgemm.py`: Multi-tile and broadcast demonstration.
 *   `dma_loader_demo.py`: Using the AXI-Stream DMA path.
 *   `profiling_example.py`: Extracting hardware performance counters.
+*   `tests/mock_llama.c`: Demonstrating `LD_PRELOAD` memory redirection.
 
 ---
 © 2026 Ternary Fabric Project. All rights reserved.
