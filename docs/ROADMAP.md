@@ -106,10 +106,11 @@ Scale execution across multiple Fabric tiles within a single device.
 * Support for `tile_mask` in GEMV operations.
 * Dynamic workload partitioning across active tiles (15-60 lanes).
 
-### Phase 12 — Framework Integration (PyTorch/TF) 📅
+### Phase 12 — Framework Integration (PyTorch/TF) ✅
 Bring "Fabric Illusion" to high-level deep learning frameworks.
-*   Custom `torch.autograd` functions for Fabric offload.
-*   Transparent interception of Tensor allocations.
+*   **Status:** Complete.
+*   **Deliverable:** `src/pytfmbs/torch.py` and `TFMBSLinear` module.
+*   **Features:** Custom `torch.autograd` functions for Fabric offload, automatic weight quantization, and residency management.
 
 ### Phase 13 — Large-Model Support & Multi-Layer Batching 📅
 Optimizing for models exceeding 70B+ parameters.
