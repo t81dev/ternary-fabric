@@ -4,7 +4,7 @@
 
 ## 1. Core Innovation
 
-Traditional binary accelerators spend a significant portion of their power and area on multipliers. The Ternary Fabric replaces these with simple **Multiplexer-Accumulators**:
+Traditional binary accelerators spend a significant portion of their power and area on multipliers. Ternary Fabric replaces these with simple **Multiplexer-Accumulators**:
 
 *   **Sign-Flip Logic:** Multiplication by $+1$ or $-1$ is reduced to a conditional addition or subtraction.
 *   **Zero-Skip Hardware:** If either the weight or input is $0$, the accumulator is clock-gated. Power is only consumed for non-zero operations, making it ideal for sparse models like Large Language Models (LLMs).
