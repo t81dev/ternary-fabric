@@ -14,8 +14,8 @@
 | Test Case | Tiles | Status | Notes |
 | --- | --- | --- | --- |
 | Single Tile Legacy | 0 | PASSED | Backward compatibility verified. |
-| All Tiles Broadcast | 0,1,2,3 | PENDING | Verifying via tests/test_multi_tile.py |
-| Partial Masking | 1,3 | PENDING | |
+| All Tiles Broadcast | 0,1,2,3 | PASSED | Verified via `tests/test_multi_tile.py`. |
+| Partial Masking | 1,3 | PASSED | Verified via `tests/test_multi_tile.py`. |
 
 ## 3. Power Estimation (Optional)
 - Total Dynamic Power: TBD

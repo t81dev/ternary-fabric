@@ -6,6 +6,14 @@ The Ternary Fabric is a vectorized SIMD accelerator designed for integration int
 
 The fabric is composed of multiple independent **Tiles** that operate in lock-step. This allows for massive parallelization of workloads.
 
+### Global Frame Controller
+The Frame Controller acts as the "brain" of the fabric. It translates the TFD into a stream of control signals (Start, Opcode, Stride) that are broadcast to all active tiles. It also manages the global state and the `done` signal.
+
+### Tile Masking & Selection
+Workloads can be targeted at specific tiles using the `tile_mask` (found in the TFD and the CONTROL register).
+*   **Selective Execution:** If a tile's mask bit is `0`, it remains idle, conserving power.
+*   **Independent Data, Shared Control:** All active tiles receive the same control signals but operate on their private SRAM data.
+
 ```text
        AXI4-Lite Control Plane / AXI-Stream DMA
                   |

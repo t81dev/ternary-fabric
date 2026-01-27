@@ -28,8 +28,11 @@ The fabric reaches its peak theoretical throughput of **30.0 GOPS** at 250 MHz f
 ### 3.2 Sparsity Advantage
 With Zero-Skip enabled, the fabric avoids unnecessary computations. At 50% random sparsity, the architecture demonstrated an average of **65-70%** effective skip rate in lanes, directly translating to power efficiency.
 
-## 4. Conclusion
-The Ternary Fabric provides a scalable, efficient, and high-throughput substrate for the next generation of ternary-quantized neural networks. Future work includes expanding the kernel library to include T-LSTM and T-Attention and moving toward full FPGA deployment.
+## 4. Future Directions & Experimental Kernels
+With the core multi-tile architecture (Phase 6b) now validated, the project is expanding into complex recurrent and attention-based structures. Current experimental kernels include **T-LSTM** and **T-Attention**, which are undergoing functional verification in the software reference layer before being committed to RTL.
+
+## 5. Conclusion
+The Ternary Fabric provides a scalable, efficient, and high-throughput substrate for the next generation of ternary-quantized neural networks. The successful implementation of Phase 6b demonstrates that ternary-native computing can scale to meet the demands of modern AI while maintaining a fraction of the power and area overhead of binary systems.
 
 ---
 © 2026 Ternary Fabric Project.

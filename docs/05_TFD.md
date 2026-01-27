@@ -26,7 +26,7 @@ The `exec_hints` register is a 32-bit field that configures the hardware kernel 
 ```text
 Bits  | Name           | Description
 ------|----------------|---------------------------------------------------
-07:00 | KERNEL_ID      | 01:DOT, 04:CONV2D, 05:MAXPOOL, 06:TGEMM
+07:00 | KERNEL_ID      | 01:DOT, 04:CONV2D, 05:MAXPOOL, 06:TGEMM, 07:CONV3D, 08:LSTM, 09:ATTN
 16    | BIAS_EN        | Enable post-accumulation bias (If supported)
 17    | ZERO_SKIP_EN   | Enable clock-gating for zero trits
 18    | FREE_NEG_EN    | Negate all weights during this frame
@@ -47,6 +47,9 @@ Bits  | Name           | Description
 | `0x04` | `CONV2D`| 2D Convolution (Uses stride/pad hints). |
 | `0x05` | `MAXPOOL`| Ternary Max Pooling. |
 | `0x06` | `TGEMM` | Matrix multiplication (Optimized accumulation). |
+| `0x07` | `CONV3D`| 3D Convolution (Experimental). |
+| `0x08` | `LSTM`  | Ternary LSTM (Experimental). |
+| `0x09` | `ATTN`  | Ternary Attention (Experimental). |
 
 ## 4. Packing Formats (`packing_fmt`)
 

@@ -33,10 +33,32 @@ Supports Max, Min, and Average pooling.
 *   **DOT:** Performs $Acc = \sum (W_i \times I_i)$.
 *   **MUL:** Performs $Out_i = W_i \times I_i$. The result registers contain the last product for each lane.
 
-## 5. Summary Table of Hints
+## 5. Experimental Kernels (Reference-Backed)
+
+These kernels are currently available in the Python reference layer and API surface, serving as correctness and interface prototypes. RTL acceleration and performance characterization are planned.
+
+### T-CONV3D
+**Kernel ID:** `0x07`
+**Status:** Experimental
+Extends the 2D convolution logic with a deeper spatial traversal simulation in the reference mock.
+
+### T-LSTM
+**Kernel ID:** `0x08`
+**Status:** Experimental
+Supports recurrent ternary operations. Uses standard accumulation patterns in the current reference model.
+
+### T-ATTENTION
+**Kernel ID:** `0x09`
+**Status:** Experimental
+Implements the core dot-product attention mechanism using ternary-quantized Query, Key, and Value vectors.
+
+## 6. Summary Table of Hints
 
 | Kernel | Required Hints | Optional Hints |
 | --- | --- | --- |
 | TGEMM | - | Zero-Skip, Broadcast |
 | CONV2D | Stride, KSize | Pad, Dilation |
 | MAXPOOL| Pool_Win, Pool_Op | - |
+| CONV3D | Stride | Experimental |
+| LSTM   | - | Experimental |
+| ATTN   | - | Experimental |
