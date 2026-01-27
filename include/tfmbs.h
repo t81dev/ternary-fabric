@@ -75,6 +75,25 @@ typedef struct {
 #define TFMBS_HINT_FREE_NEG_EN     (1 << 18)
 #define TFMBS_HINT_WEIGHT_BRDCST   (1 << 19)
 
+/* T-CONV Specific Hints */
+#define TFMBS_HINT_STRIDE_MASK     0x00300000 // Bits 21:20
+#define TFMBS_HINT_STRIDE_SHIFT    20
+#define TFMBS_HINT_PAD_MASK        0x00C00000 // Bits 23:22
+#define TFMBS_HINT_PAD_SHIFT       22
+#define TFMBS_HINT_KSIZE_MASK      0x03000000 // Bits 25:24
+#define TFMBS_HINT_KSIZE_SHIFT     24
+#define TFMBS_HINT_DILATION_EN     (1 << 26)
+
+/* T-POOL Specific Hints */
+#define TFMBS_HINT_POOL_WIN_MASK   0x18000000 // Bits 28:27
+#define TFMBS_HINT_POOL_WIN_SHIFT  27
+#define TFMBS_HINT_POOL_OP_MASK    0x60000000 // Bits 30:29
+#define TFMBS_HINT_POOL_OP_SHIFT   29
+
+#define TFMBS_POOL_OP_MAX          0x0
+#define TFMBS_POOL_OP_MIN          0x1
+#define TFMBS_POOL_OP_AVG          0x2
+
 /**
  * @brief Status Codes
  */

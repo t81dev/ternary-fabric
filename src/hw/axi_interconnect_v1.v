@@ -44,8 +44,11 @@ module axi_interconnect_v1 #(
     // Vector Results & Profiling Input
     input  wire [(15*32)-1:0]     vector_results,
     input  wire [(15*32)-1:0]     skip_counts,
+    input  wire [(15*32)-1:0]     active_cycles,
+    input  wire [14:0]            overflow_flags,
     input  wire [31:0]            cycle_count,
     input  wire [31:0]            utilization_count,
+    input  wire [31:0]            burst_wait_cycles,
 
     // SRAM Write Interface
     output reg [11:0]             sram_waddr,
@@ -153,6 +156,8 @@ module axi_interconnect_v1 #(
                     7'h1C: s_axi_rdata <= {17'b0, fabric_lane_mask};
                     7'h20: s_axi_rdata <= cycle_count;
                     7'h24: s_axi_rdata <= utilization_count;
+                    7'h68: s_axi_rdata <= burst_wait_cycles;
+                    7'h6C: s_axi_rdata <= {17'b0, overflow_flags};
                     default: begin
                         if (s_axi_araddr[6:0] >= 7'h28 && s_axi_araddr[6:0] <= 7'h64) begin
                             // Skip counters range
@@ -172,6 +177,26 @@ module axi_interconnect_v1 #(
                                 12: s_axi_rdata <= skip_counts[12*32 +: 32];
                                 13: s_axi_rdata <= skip_counts[13*32 +: 32];
                                 14: s_axi_rdata <= skip_counts[14*32 +: 32];
+                                default: s_axi_rdata <= 32'h0;
+                            endcase
+                        end else if (s_axi_araddr[6:0] >= 7'h70 && s_axi_araddr[6:0] <= 7'hAC) begin
+                            // Active cycles range
+                            case ((s_axi_araddr[6:0] - 7'h70) >> 2)
+                                0:  s_axi_rdata <= active_cycles[0*32 +: 32];
+                                1:  s_axi_rdata <= active_cycles[1*32 +: 32];
+                                2:  s_axi_rdata <= active_cycles[2*32 +: 32];
+                                3:  s_axi_rdata <= active_cycles[3*32 +: 32];
+                                4:  s_axi_rdata <= active_cycles[4*32 +: 32];
+                                5:  s_axi_rdata <= active_cycles[5*32 +: 32];
+                                6:  s_axi_rdata <= active_cycles[6*32 +: 32];
+                                7:  s_axi_rdata <= active_cycles[7*32 +: 32];
+                                8:  s_axi_rdata <= active_cycles[8*32 +: 32];
+                                9:  s_axi_rdata <= active_cycles[9*32 +: 32];
+                                10: s_axi_rdata <= active_cycles[10*32 +: 32];
+                                11: s_axi_rdata <= active_cycles[11*32 +: 32];
+                                12: s_axi_rdata <= active_cycles[12*32 +: 32];
+                                13: s_axi_rdata <= active_cycles[13*32 +: 32];
+                                14: s_axi_rdata <= active_cycles[14*32 +: 32];
                                 default: s_axi_rdata <= 32'h0;
                             endcase
                         end else begin

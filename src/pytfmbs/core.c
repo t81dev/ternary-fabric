@@ -63,6 +63,43 @@ static int Fabric_init(FabricObject *self, PyObject *args, PyObject *kwds) {
     return 0;
 }
 
+static PyObject* Fabric_load_stream(FabricObject *self, PyObject *args) {
+    PyObject *tfd_dict;
+    Py_buffer buffer;
+
+    if (!PyArg_ParseTuple(args, "O!y*", &PyDict_Type, &tfd_dict, &buffer))
+        return NULL;
+
+    if (!self->mmio_ptr) {
+        PyBuffer_Release(&buffer);
+        PyErr_SetString(PyExc_RuntimeError, "MMIO not initialized");
+        return NULL;
+    }
+
+    if (self->is_mock) {
+        printf("[TFMBS-Mock] AXI-Stream DMA Transfer Started (size=%zu)\n", buffer.len);
+        volatile uint32_t* regs = (uint32_t*)self->mmio_ptr;
+
+        // Parse TFD header and simulate hardware DMA load
+        PyObject *item;
+        uint32_t base_addr = 0;
+        if ((item = PyDict_GetItemString(tfd_dict, "base_addr"))) base_addr = (uint32_t)PyLong_AsUnsignedLong(item);
+
+        // Mock SRAM load
+        uint8_t* target = (uint8_t*)self->mmio_ptr + base_addr;
+        memcpy(target, buffer.buf, buffer.len);
+
+        // Increment burst wait cycles in mock to simulate transfer time
+        regs[26] += (uint32_t)(buffer.len / 4);
+    } else {
+        // In real hardware, we would write to the AXI-Stream FIFO or DMA controller
+        // For now, this is a placeholder for physical hardware DMA.
+    }
+
+    PyBuffer_Release(&buffer);
+    Py_RETURN_NONE;
+}
+
 static PyObject* Fabric_load(FabricObject *self, PyObject *args) {
     uint32_t offset;
     Py_buffer buffer;
@@ -153,6 +190,28 @@ static PyObject* Fabric_profile(FabricObject *self, PyObject *args) {
     return dict;
 }
 
+static PyObject* Fabric_profile_detailed(FabricObject *self, PyObject *args) {
+    if (!self->mmio_ptr) {
+        PyErr_SetString(PyExc_RuntimeError, "MMIO not initialized");
+        return NULL;
+    }
+
+    volatile uint32_t* regs = (uint32_t*)self->mmio_ptr;
+    PyObject* dict = Fabric_profile(self, NULL);
+
+    PyDict_SetItemString(dict, "burst_wait_cycles", PyLong_FromUnsignedLong(regs[26]));
+    PyDict_SetItemString(dict, "overflow_flags", PyLong_FromUnsignedLong(regs[27]));
+
+    PyObject* active = PyList_New(15);
+    for (int i = 0; i < 15; i++) {
+        // Active counters start at 0x70 -> regs[28]
+        PyList_SetItem(active, i, PyLong_FromUnsignedLong(regs[28 + i]));
+    }
+    PyDict_SetItemString(dict, "active_cycles", active);
+
+    return dict;
+}
+
 static PyObject* Fabric_results(FabricObject *self, PyObject *args) {
     if (!self->mmio_ptr) {
         PyErr_SetString(PyExc_RuntimeError, "MMIO not initialized");
@@ -184,28 +243,38 @@ static PyObject* Fabric_run(FabricObject *self, PyObject *args) {
     // base_addr
     if ((item = PyDict_GetItemString(tfd_dict, "base_addr"))) {
         regs[2] = (uint32_t)PyLong_AsUnsignedLong(item);
+    } else {
+        regs[2] = 0;
     }
 
     // frame_len or depth
     if ((item = PyDict_GetItemString(tfd_dict, "depth")) ||
         (item = PyDict_GetItemString(tfd_dict, "frame_len"))) {
         regs[3] = (uint32_t)PyLong_AsLong(item);
+    } else {
+        regs[3] = 0;
     }
 
     // lane_stride or stride
     if ((item = PyDict_GetItemString(tfd_dict, "lane_stride")) ||
         (item = PyDict_GetItemString(tfd_dict, "stride"))) {
         regs[4] = (uint32_t)PyLong_AsLong(item);
+    } else {
+        regs[4] = 1;
     }
 
     // exec_hints
     if ((item = PyDict_GetItemString(tfd_dict, "exec_hints"))) {
         regs[5] = (uint32_t)PyLong_AsUnsignedLong(item);
+    } else {
+        regs[5] = 0;
     }
 
     // lane_count
     if ((item = PyDict_GetItemString(tfd_dict, "lane_count"))) {
         regs[6] = (uint32_t)PyLong_AsLong(item);
+    } else {
+        regs[6] = 15;
     }
 
     // lane_mask
@@ -220,6 +289,7 @@ static PyObject* Fabric_run(FabricObject *self, PyObject *args) {
 #endif
 
     regs[0] = 0x1;                 // Start signal
+    regs[1] &= ~0x2;               // Clear Done bit
 
     if (self->is_mock) {
     // --- Mock Simulation Logic ---
@@ -227,6 +297,7 @@ static PyObject* Fabric_run(FabricObject *self, PyObject *args) {
     uint32_t exec_hints = regs[5];
     uint32_t lane_count = regs[6];
     uint32_t lane_mask = regs[7];
+    uint8_t  op_mode = exec_hints & 0xFF;
 
     // SRAM regions at 0x1000 and 0x2000 (word-indexed)
     uint32_t* weight_sram = (uint32_t*)((uint8_t*)regs + 0x1000);
@@ -235,19 +306,39 @@ static PyObject* Fabric_run(FabricObject *self, PyObject *args) {
     uint32_t* cycle_count = &regs[8];
     uint32_t* utilization_count = &regs[9];
     uint32_t* skip_counts = &regs[10];
+    uint32_t* burst_wait = &regs[26];
+    uint32_t* overflow_flags = &regs[27];
+    uint32_t* active_cycles = &regs[28];
 
     // Reset results and counters
     for (int i=0; i<15; i++) {
-        results[i] = 0;
+        results[i] = (op_mode == TFMBS_KERNEL_MAXPOOL && (exec_hints >> 29) == 0x1) ? 0x7FFFFFFF :
+                     (op_mode == TFMBS_KERNEL_MAXPOOL && (exec_hints >> 29) == 0x0) ? (uint32_t)0x80000000 : 0;
         skip_counts[i] = 0;
+        active_cycles[i] = 0;
     }
     *cycle_count = 0;
     *utilization_count = 0;
+    *burst_wait = depth / 10; // Simulated DMA stall every 10 cycles
+    *overflow_flags = 0;
+
+    uint32_t stride = regs[4];
+    if (stride == 0) stride = 1;
 
     for (uint32_t d = 0; d < depth; d++) {
         (*cycle_count)++;
-        uint32_t w_word = weight_sram[d];
-        uint32_t i_word = input_sram[d];
+
+        uint32_t idx = d * stride;
+        // Adjust for T-CONV stride if set in hints
+        if (op_mode == TFMBS_KERNEL_CONV2D) {
+            uint32_t conv_stride = ((exec_hints >> 20) & 0x3) + 1;
+            idx = d * stride * conv_stride;
+        }
+
+        if (idx >= 1024) break; // SRAM bounds check
+
+        uint32_t w_word = weight_sram[idx];
+        uint32_t i_word = input_sram[idx];
 
         int8_t w_trits[15];
         int8_t i_trits[15];
@@ -269,13 +360,32 @@ static PyObject* Fabric_run(FabricObject *self, PyObject *args) {
         for (int l = 0; l < 15; l++) {
             if (l < lane_count && (lane_mask & (1 << l))) {
                 active_this_cycle++;
+                active_cycles[l]++;
                 int8_t w = w_trits[l];
                 int8_t i = i_trits[l];
 
                 if ((exec_hints & (1 << 17)) && (w == 0 || i == 0)) {
                     skip_counts[l]++;
                 } else {
-                    results[l] += (w * i);
+                    int32_t prod = (int32_t)w * (int32_t)i;
+                    if (op_mode == TFMBS_KERNEL_DOT || op_mode == TFMBS_KERNEL_TGEMM || op_mode == TFMBS_KERNEL_CONV2D) {
+                        int32_t old_res = (int32_t)results[l];
+                        results[l] += prod;
+                        // Basic overflow check
+                        if (prod > 0 && old_res > 0 && (int32_t)results[l] < 0) *overflow_flags |= (1 << l);
+                        if (prod < 0 && old_res < 0 && (int32_t)results[l] > 0) *overflow_flags |= (1 << l);
+                    } else if (op_mode == TFMBS_KERNEL_MUL) {
+                        results[l] = prod;
+                    } else if (op_mode == TFMBS_KERNEL_MAXPOOL) {
+                        uint32_t pool_op = (exec_hints >> 29) & 0x3;
+                        if (pool_op == 0x0) { // MAX
+                            if (prod > (int32_t)results[l]) results[l] = prod;
+                        } else if (pool_op == 0x1) { // MIN
+                            if (prod < (int32_t)results[l]) results[l] = prod;
+                        } else if (pool_op == 0x2) { // AVG (sum)
+                            results[l] += prod;
+                        }
+                    }
                 }
             }
         }
@@ -293,8 +403,10 @@ static PyObject* Fabric_run(FabricObject *self, PyObject *args) {
 static PyMethodDef Fabric_methods[] = {
     {"run", (PyCFunction)Fabric_run, METH_VARARGS, "Execute a Ternary Frame Descriptor"},
     {"load", (PyCFunction)Fabric_load, METH_VARARGS, "Load binary data into Fabric SRAM (filename, offset) or (offset, bytes)"},
+    {"load_stream", (PyCFunction)Fabric_load_stream, METH_VARARGS, "Load data via AXI-Stream DMA (tfd_dict, bytes)"},
     {"results", (PyCFunction)Fabric_results, METH_NOARGS, "Read accumulated results from the Fabric"},
     {"profile", (PyCFunction)Fabric_profile, METH_NOARGS, "Read performance counters from the Fabric"},
+    {"profile_detailed", (PyCFunction)Fabric_profile_detailed, METH_NOARGS, "Read detailed performance counters from the Fabric"},
     {NULL, NULL, 0, NULL} 
 };
 

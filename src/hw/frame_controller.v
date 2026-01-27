@@ -8,6 +8,7 @@ module frame_controller #(
     input  wire [ADDR_WIDTH-1:0]  base_addr,
     input  wire [15:0]            frame_depth,
     input  wire [7:0]             lane_stride, 
+    input  wire [31:0]            exec_hints,
     
     input  wire                   start_trigger,
     output reg                    engine_enable,
@@ -48,9 +49,14 @@ module frame_controller #(
                     if (mem_ready) begin
                         if (current_depth < frame_depth - 1) begin
                             current_depth <= current_depth + 1;
-                            // For 15-lanes, each word (3 bytes) holds one step.
-                            // Increment address by lane_stride words.
-                            mem_addr      <= mem_addr + ((LANE_COUNT / 15) * lane_stride);
+
+                            // Adjust stride for T-CONV if hint is set
+                            // Bits [21:20] of exec_hints: Stride (1-4)
+                            wire [1:0] conv_stride = exec_hints[21:20];
+                            wire [7:0] actual_stride = (exec_hints[7:0] == 8'h04) ?
+                                                      (lane_stride * (conv_stride + 1)) : lane_stride;
+
+                            mem_addr      <= mem_addr + ((LANE_COUNT / 15) * actual_stride);
                         end else begin
                             state         <= DONE;
                             engine_enable <= 1'b0;

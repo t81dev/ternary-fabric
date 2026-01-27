@@ -23,6 +23,8 @@ module vector_engine #(
     // Output: Parallel Accumulator State
     output wire [(LANES*ACCUM_WIDTH)-1:0] vector_out,
     output wire [(LANES*32)-1:0]    skip_counts,
+    output wire [(LANES*32)-1:0]    active_cycles,
+    output wire [LANES-1:0]         overflow_flags,
     output reg  [31:0]              cycle_count,
     output reg  [31:0]              utilization_count
 );
@@ -47,10 +49,16 @@ module vector_engine #(
                 .weight(effective_weights[i*2 +: 2]),
                 .trit_in(bus_inputs[i*2 +: 2]),
                 .accumulator(vector_out[i*ACCUM_WIDTH +: ACCUM_WIDTH]),
-                .skip_count(skip_counts[i*32 +: 32])
+                .skip_count(skip_counts[i*32 +: 32]),
+                .active_cycles(active_cycles[i*32 +: 32]),
+                .overflow(overflow_flags[i])
             );
         end
     endgenerate
+
+    // Cross-Lane Pooling Logic (Optional enhancement)
+    // If Pool Window hint indicates cross-lane, we can reduce here.
+    // For now, we assume spatial pooling is handled by the lanes over time.
 
     // Performance Profiling Logic
     integer j;
