@@ -37,4 +37,4 @@ Check out the `examples/` directory for runnable scripts:
 *   `profiling_example.py`: Extracting hardware performance counters.
 
 ---
-© 2024 Ternary Fabric Project. All rights reserved.
+© 2026 Ternary Fabric Project. All rights reserved.
