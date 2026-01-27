@@ -1,7 +1,7 @@
 # Whitepaper: Accelerating AI via Ternary-Native Computing
 
 **Abstract:**
-The Ternary Fabric is a high-performance co-processor architecture designed to leverage balanced ternary semantics ({-1, 0, 1}) for AI and signal processing. By eliminating traditional binary multipliers and replacing them with simple gating and sign-flipping logic, the architecture achieves extreme throughput and power efficiency. This paper describes the multi-tile scaling architecture, the PT-5 memory packing format, and the Zero-Skip optimization that exploits data sparsity.
+Ternary Fabric is a high-performance co-processor architecture designed to leverage balanced ternary semantics ({-1, 0, 1}) for AI and signal processing. By eliminating traditional binary multipliers and replacing them with simple gating and sign-flipping logic, the architecture achieves extreme throughput and power efficiency. This paper describes the multi-tile scaling architecture, the PT-5 memory packing format, and the Zero-Skip optimization that exploits data sparsity.
 
 ## 1. Introduction
 Traditional binary computing faces the "memory wall" and the "power wall" in AI workloads. Binary multiplications are energy-intensive and require significant silicon area. The Ternary Fabric proposes an alternative: executing directly on ternary-quantized weights and inputs.
