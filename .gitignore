@@ -4,83 +4,67 @@ obj_dir/*
 *.o
 *.a
 *.d
-*.so
-# ^ Keep the intentional .so (pytfmbs/*.so) by not using /* at root if needed, or exclude specifically later
+*.so                # careful: this catches pytfmbs/*.so too — see exclusion below
 v_bench_binary
 v_profile_binary
 
-# --- Verilator & Simulation Artifacts ---
+# --- Verilator & Simulation Artifacts (this is the key part) ---
+obj_dir/             # catches EVERYTHING inside, including all V*.cpp, V*.h
 *.vcd
 *.fst
-*.lxt2           # occasional other waveform formats
-*.vpd
-*.fsdb           # Verdi/Synopsys format if anyone uses it
-*.log            # sim logs, verilator warnings, etc.
-*.cpp            # sometimes Verilator generates extra .cpp if using --exe badly
-*.h              # generated headers beyond the main ones
-obj_dir/         # already covered above, but explicit is fine
+*.lxt2
+*.fsdb
+*.log                # Verilator/sim logs
+V*.mk                # generated makefiles (Vtop.mk etc.)
+V*__*.cpp            # partitioned DepSet files, Trace, Slow, etc.
+V*__*.h
+V*__Syms*
+V*___024*
+V*__pch.h
+V*__ver.*
+*.cpp                # broad catch for generated .cpp OUTSIDE obj_dir (rare, but safe)
+*.h                  # same for .h — but only if not in source dirs
+
+# If any generated files escape obj_dir (uncommon), but to be safe:
+**/V*.cpp
+**/V*.h
 
 # --- Python & Build System ---
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
 .pytest_cache/
-.mypy_cache/
-.ruff_cache/
 build/
 dist/
 *.egg-info/
 venv/
 .env
-*.egg
-pip-wheel-metadata/
 
 # --- Ternary Data & Logs ---
 *.tfrm
 *.tfd
 weights.txt
-trace.vcd          # already in Verilator section, but ok to duplicate for clarity
+trace.vcd
 waveform.vcd
-*.mem.dump         # if you ever dump mem contents
-*.prof             # profiling outputs if using perf/gprof
-*.jsonl            # common for telemetry dumps
 
-# --- Synthesis / FPGA Artifacts ---
+# --- Synthesis / FPGA ---
 *.bit
 *.rpt
 *.dcp
-*.edif
-*.ngc
-*.sdf
-*.xdc.bak
 vivado*.log
 *.jou
-*.str
-*.xpr              # Vivado project files (if you start using .xpr)
+*.xpr
 *.runs/
 *.cache/
-*.hw/
-*.ip_user_files/
 
-# --- OS / Editor Specific ---
+# --- OS / Editor ---
 .DS_Store
 Thumbs.db
 *.swp
-*.swo
-*~
-.#*
 .vscode/
 .idea/
-*.bak
-*.tmp
 
-# --- Optional: Keep golden/reference files under version control ---
-# !golden/*.vcd      # uncomment if you want to commit reference waveforms
-# !reports/*.rpt     # for synthesis reports, etc.
-# !tests/golden/*    # if you add golden model outputs
-
-# --- Large / Generated Files (add if needed) ---
-*.gz               # compressed logs/reports
-*.tar
-*.zip
+# --- Exceptions: Don't ignore your own source .so or key files ---
+!src/pytfmbs/*.so     # keep the Python extension
+!tests/*.cpp          # your hand-written testbench .cpp
+!tests/*.h            # if you add any
+!src/libtfmbs_*.c     # your interposer libs (even if .c, for consistency)
