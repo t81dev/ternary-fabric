@@ -1,11 +1,3 @@
-Below is a **concrete, engineering-grade roadmap** for using **Ternary-Fabric to accelerate `llama.cpp` models**. It’s staged so each phase produces value without requiring heroic rewrites.
-
-The guiding rule (from Duotronic → Fabric evolution):
-
-> **Keep control binary. Accelerate dataflow. Exploit ternary where bandwidth and MAC dominate.**
-
----
-
 # 🧭 Ternary-Fabric × llama.cpp Acceleration Roadmap
 
 ---
