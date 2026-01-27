@@ -1,32 +1,86 @@
 # --- Compiled Binaries & Objects ---
-bin/
-obj_dir/
+bin/*
+obj_dir/*
 *.o
 *.a
 *.d
 *.so
+# ^ Keep the intentional .so (pytfmbs/*.so) by not using /* at root if needed, or exclude specifically later
 v_bench_binary
+v_profile_binary
 
 # --- Verilator & Simulation Artifacts ---
 *.vcd
 *.fst
-*.pyc
-__pycache__/
-.pytest_cache/
+*.lxt2           # occasional other waveform formats
+*.vpd
+*.fsdb           # Verdi/Synopsys format if anyone uses it
+*.log            # sim logs, verilator warnings, etc.
+*.cpp            # sometimes Verilator generates extra .cpp if using --exe badly
+*.h              # generated headers beyond the main ones
+obj_dir/         # already covered above, but explicit is fine
 
 # --- Python & Build System ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 build/
 dist/
 *.egg-info/
 venv/
 .env
+*.egg
+pip-wheel-metadata/
 
 # --- Ternary Data & Logs ---
 *.tfrm
 *.tfd
 weights.txt
-trace.vcd
+trace.vcd          # already in Verilator section, but ok to duplicate for clarity
+waveform.vcd
+*.mem.dump         # if you ever dump mem contents
+*.prof             # profiling outputs if using perf/gprof
+*.jsonl            # common for telemetry dumps
 
-# --- OS Specific ---
+# --- Synthesis / FPGA Artifacts ---
+*.bit
+*.rpt
+*.dcp
+*.edif
+*.ngc
+*.sdf
+*.xdc.bak
+vivado*.log
+*.jou
+*.str
+*.xpr              # Vivado project files (if you start using .xpr)
+*.runs/
+*.cache/
+*.hw/
+*.ip_user_files/
+
+# --- OS / Editor Specific ---
 .DS_Store
-.Thumbs.db
+Thumbs.db
+*.swp
+*.swo
+*~
+.#*
+.vscode/
+.idea/
+*.bak
+*.tmp
+
+# --- Optional: Keep golden/reference files under version control ---
+# !golden/*.vcd      # uncomment if you want to commit reference waveforms
+# !reports/*.rpt     # for synthesis reports, etc.
+# !tests/golden/*    # if you add golden model outputs
+
+# --- Large / Generated Files (add if needed) ---
+*.gz               # compressed logs/reports
+*.tar
+*.zip
