@@ -1,16 +1,4 @@
-Below is a **deep, systems-level roadmap for Strategy 4**:
-
-> **Accelerate `llama.cpp` with Ternary-Fabric by exposing Fabric as a device-level memory/compute substrate (PCIe/CXL-like), so llama.cpp runs unmodified while Fabric transparently compresses, skips, and executes.**
-
-This treats Ternary-Fabric not as a plugin, but as **a memory-centric accelerator that the OS maps into the process**.
-
-No llama.cpp source changes.
-No GGUF changes required (initially).
-Acceleration happens below the application layer.
-
----
-
-# 🧭 Strategy 4 Roadmap — Device-Level Fabric Acceleration
+# 🧭 Strategy Roadmap — Device-Level Fabric Acceleration
 
 ---
 
