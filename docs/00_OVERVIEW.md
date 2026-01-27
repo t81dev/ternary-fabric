@@ -20,7 +20,7 @@ To save bandwidth, data is stored in a high-density **PT-5** format (5 trits per
 ### Multi-Tile Scalability
 The architecture is parameterized to scale from a single tile to a large matrix of tiles. Each tile operates in lock-step, sharing a frame controller but maintaining private SRAM for local data storage and high-throughput parallel execution.
 
-## 3. Project Status (Phase 6b)
+## 3. Project Status (Phase 9)
 
 The project has evolved through several key phases:
 
@@ -28,8 +28,10 @@ The project has evolved through several key phases:
 *   **Phase 3:** RTL design of the Vector Engine and TPE lanes.
 *   **Phase 4:** Integration with Python via `pytfmbs` and development of the quantization toolkit.
 *   **Phase 5:** Implementation of hardware profiling counters and dynamic lane masking.
-*   **Phase 6a:** Extension of the kernel library (T-CONV, T-POOL) and DMA support.
-*   **Phase 6b (Current):** Multi-tile scaling, broadcast weight support, and ASIC-ready SRAM wrappers. This phase marks the **production-core** readiness of the multi-tile fabric.
+*   **Phase 6:** Multi-tile scaling, broadcast weight support, and ASIC-ready SRAM wrappers.
+*   **Phase 7:** LRU-based Paging and block eviction for large models.
+*   **Phase 8:** Asynchronous execution with a background command queue.
+*   **Phase 9 (Current):** Integrated telemetry and proof-of-concept acceleration for binary hosts.
 
 ## 4. Experimental Kernels
 

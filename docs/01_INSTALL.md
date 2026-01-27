@@ -35,6 +35,13 @@ make python_ext
 ```
 This will create a `.so` file in `src/pytfmbs/`.
 
+### Build the Interposer and Device Library
+To use the Fabric with `llama.cpp` or other binary applications:
+```bash
+make all
+```
+This will produce `libtfmbs_device.so` and `libtfmbs_intercept.so`.
+
 ### Set Environment Variables
 To ensure Python can find the extension, add it to your `PYTHONPATH`:
 ```bash
@@ -57,5 +64,9 @@ python3 test_mock.py
 ```
 Or run the full regression suite:
 ```bash
-pytest tests/test_phase6.py
+pytest tests/
+```
+To verify the Phase 9 interposer features:
+```bash
+make run_mock_llama
 ```
