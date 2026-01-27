@@ -1,8 +1,8 @@
 # 🧭 Roadmap Progress — Device-Level Fabric Acceleration
 
-## Status Summary (Phases 0-6 Complete)
+## Status Summary (Phases 0-9 Complete)
 
-We have successfully implemented the first seven phases (0-6) of the roadmap, achieving a complete proof-of-concept for transparently accelerating `llama.cpp` using the Ternary Fabric without requiring any modifications to the host application.
+We have successfully implemented the first ten phases (0-9) of the roadmap, achieving a complete proof-of-concept for transparently accelerating `llama.cpp` using the Ternary Fabric with LRU eviction, asynchronous pipelining, and real-time telemetry.
 
 ### Phase 0: Device Contract Defined ✅
 - **Accomplishment:** Defined the C ABI for memory management and execution.
@@ -25,6 +25,15 @@ We have successfully implemented the first seven phases (0-6) of the roadmap, ac
 ### Phase 6: Zero-Skip & SIMD Metrics ✅
 - **Accomplishment:** Integrated quantitative metrics into the offload path. Demonstrates significant operation reduction (~64-76% in tests) due to ternary zero-skipping.
 
+### Phase 7: Paging & Eviction ✅
+- **Accomplishment:** Implemented a block-based allocator with LRU eviction for the 128MB Fabric pool. Allows handling models larger than the Fabric pool by transparently evicting and re-loading PT-5 frames.
+
+### Phase 8: Asynchronous Pipelining ✅
+- **Accomplishment:** Introduced a background worker thread and command queue in the Fabric emulator. The interposer offloads GEMVs asynchronously, allowing the host to overlap computation. Implemented synchronization via `mprotect` and `fabric_wait`.
+
+### Phase 9: Telemetry & Proof ✅
+- **Accomplishment:** Integrated a terminal-based telemetry dashboard that reports real-time skip rates, pool usage, and eviction events during execution.
+
 ## 📊 Proof-of-Concept Validation
 
 Verified using `tests/mock_llama.c` simulating a GEMV workload:
@@ -41,11 +50,6 @@ Iteration 0: Row 0: 341 (Expected: 341)
 
 ## 🚀 Next Steps
 
-### Phase 7: Paging & Eviction
-- Implement LRU management for the Fabric pool to handle models larger than available Fabric memory.
-
-### Phase 8: Asynchronous Pipelining
-- Overlap host activation preparation with Fabric weight execution using command queues.
-
-### Phase 9: Telemetry & Proof
-- Build a real-time dashboard for skip density and energy proxy tracking.
+### Phase 10: Hardware Path (Real Device)
+- Transition the userspace emulator to a real or mock kernel driver (PCIe/MMIO).
+- Validate on FPGA or ASIC simulation environments.

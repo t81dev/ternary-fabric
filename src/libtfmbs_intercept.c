@@ -14,6 +14,9 @@
 
 static void* (*real_malloc)(size_t) = NULL;
 static void (*real_free)(void*) = NULL;
+static void* (*real_realloc)(void*, size_t) = NULL;
+static void* (*real_memcpy)(void*, const void*, size_t) = NULL;
+static void* (*real_memset)(void*, int, size_t) = NULL;
 static void* (*real_mmap)(void*, size_t, int, int, int, off_t) = NULL;
 
 static __thread int in_interposer = 0;
@@ -27,6 +30,7 @@ typedef enum { STATE_RAW, STATE_READY_TO_PACK, STATE_PT5 } fabric_state_t;
 typedef struct {
     void* ptr; size_t size; void* pt5_ptr; fabric_state_t state;
     size_t pages_touched;
+    fabric_handle_t pending_handle;
 } fabric_metadata_t;
 
 static fabric_metadata_t g_registry[MAX_ALLOCS];
@@ -68,6 +72,15 @@ static void sigsegv_handler(int sig, siginfo_t* si, void* unused) {
             in_interposer = saved; return;
         }
 
+        if (m->pending_handle) {
+            fabric_handle_t h = m->pending_handle;
+            m->pending_handle = NULL;
+            safe_log("[TFMBS] Waiting for pending async GEMV on %p\n", m->ptr);
+            fabric_wait(h);
+            mprotect(m->ptr, m->size, PROT_READ | PROT_WRITE);
+            in_interposer = saved; return;
+        }
+
         if (m->state == STATE_PT5 && (uint8_t*)si->si_addr >= (uint8_t*)m->ptr && (uint8_t*)si->si_addr < (uint8_t*)m->ptr + ps) {
             fabric_metadata_t *in_buf = NULL, *out_buf = NULL;
             for (int i=0; i<g_num_allocs; i++) {
@@ -77,12 +90,13 @@ static void sigsegv_handler(int sig, siginfo_t* si, void* unused) {
             }
             if (in_buf && out_buf) {
                 if (!g_scratch_packed_in) g_scratch_packed_in = fabric_alloc(1024*1024);
-                safe_log("[TFMBS] Offloading GEMV\n");
+                safe_log("[TFMBS] Offloading GEMV (Async)\n");
                 mprotect(in_buf->ptr, in_buf->size, PROT_READ);
                 fabric_memcpy_to(g_scratch_packed_in, in_buf->ptr, in_buf->size, 1);
-                fabric_exec_gemv(m->pt5_ptr, g_scratch_packed_in, out_buf->ptr, 512, 512);
-                fabric_metrics_t metrics; fabric_get_metrics(&metrics);
-                safe_log("[TFMBS] Done. Skips: %ld (%.1f%% reduction)\n", metrics.zero_skips, metrics.sim_cycle_reduction);
+
+                // Set output buffer to PROT_NONE and mark as pending
+                mprotect(out_buf->ptr, out_buf->size, PROT_NONE);
+                out_buf->pending_handle = fabric_exec_gemv_async(m->pt5_ptr, g_scratch_packed_in, out_buf->ptr, 512, 512);
 
                 if (g_short_circuit_enabled) {
                     ucontext_t* uc = (ucontext_t*)unused;
@@ -121,6 +135,7 @@ static void reg_alloc(void* ptr, size_t size) {
         g_registry[g_num_allocs].ptr = ptr; g_registry[g_num_allocs].size = size;
         g_registry[g_num_allocs].pt5_ptr = NULL; g_registry[g_num_allocs].state = STATE_RAW;
         g_registry[g_num_allocs].pages_touched = 0;
+        g_registry[g_num_allocs].pending_handle = NULL;
         mprotect(ptr, size, PROT_NONE);
         g_num_allocs++;
     }
@@ -137,6 +152,9 @@ static void init() {
     sa.sa_sigaction = sigsegv_handler; sigaction(SIGSEGV, &sa, NULL);
     real_malloc = dlsym(RTLD_NEXT, "malloc");
     real_free = dlsym(RTLD_NEXT, "free");
+    real_realloc = dlsym(RTLD_NEXT, "realloc");
+    real_memcpy = dlsym(RTLD_NEXT, "memcpy");
+    real_memset = dlsym(RTLD_NEXT, "memset");
     real_mmap = dlsym(RTLD_NEXT, "mmap");
     initializing = 0;
 }
@@ -166,22 +184,58 @@ void free(void* p) {
 void* realloc(void* ptr, size_t size) {
     if (!real_realloc) init();
     if (in_interposer || !real_realloc) return real_realloc ? real_realloc(ptr, size) : NULL;
-    if (is_fabric_ptr(ptr)) return malloc(size);
+    if (is_fabric_ptr(ptr)) {
+        fabric_metadata_t* m = find_meta(ptr);
+        if (m && m->pending_handle) {
+            fabric_handle_t h = m->pending_handle;
+            m->pending_handle = NULL;
+            fabric_wait(h);
+        }
+        return malloc(size);
+    }
     return real_realloc(ptr, size);
 }
 
 void* memcpy(void* d, const void* s, size_t n) {
     if (!real_memcpy) init();
     if (in_interposer || !real_memcpy) return real_memcpy ? real_memcpy(d, s, n) : __builtin_memcpy(d, s, n);
-    if (is_fabric_ptr(d)) { in_interposer = 1; fabric_memcpy_to(d, s, n, 0); in_interposer = 0; return d; }
-    if (is_fabric_ptr(s)) { in_interposer = 1; fabric_memcpy_from(d, s, n, 0); in_interposer = 0; return d; }
+
+    if (is_fabric_ptr(d)) {
+        fabric_metadata_t* m = find_meta(d);
+        if (m && m->pending_handle) {
+            fabric_handle_t h = m->pending_handle;
+            m->pending_handle = NULL;
+            fabric_wait(h);
+        }
+        in_interposer = 1; fabric_memcpy_to(d, s, n, 0); in_interposer = 0;
+        return d;
+    }
+    if (is_fabric_ptr(s)) {
+        fabric_metadata_t* m = find_meta(s);
+        if (m && m->pending_handle) {
+            fabric_handle_t h = m->pending_handle;
+            m->pending_handle = NULL;
+            fabric_wait(h);
+        }
+        in_interposer = 1; fabric_memcpy_from(d, s, n, 0); in_interposer = 0;
+        return d;
+    }
     return real_memcpy(d, s, n);
 }
 
 void* memset(void* s, int c, size_t n) {
     if (!real_memset) init();
     if (in_interposer || !real_memset) return real_memset ? real_memset(s, c, n) : __builtin_memset(s, c, n);
-    if (is_fabric_ptr(s)) { in_interposer = 1; real_memset(s, c, n); in_interposer = 0; return s; }
+    if (is_fabric_ptr(s)) {
+        fabric_metadata_t* m = find_meta(s);
+        if (m && m->pending_handle) {
+            fabric_handle_t h = m->pending_handle;
+            m->pending_handle = NULL;
+            fabric_wait(h);
+        }
+        in_interposer = 1; real_memset(s, c, n); in_interposer = 0;
+        return s;
+    }
     return real_memset(s, c, n);
 }
 
