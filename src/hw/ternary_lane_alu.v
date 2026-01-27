@@ -37,6 +37,7 @@ module ternary_lane_alu (
     assign skip_cycle = zero_skip_en && (weight == 2'b00 || trit_in == 2'b00);
 
     wire [1:0] pool_op = exec_hints[30:29];
+    wire [31:0] next_acc = accumulator + {{30{product[1]}}, product};
 
     always @(posedge clk or posedge reset) begin
         if (reset) begin
@@ -53,7 +54,6 @@ module ternary_lane_alu (
             case (op_mode)
                 8'h01, 8'h04, 8'h06: begin // DOT, T-CONV, TGEMM
                     if (!skip_cycle) begin
-                        wire [31:0] next_acc = accumulator + {{30{product[1]}}, product};
                         // Detect overflow (simplified signed overflow)
                         if (product[1] == 1'b0 && product[0] == 1'b1 && accumulator[31] == 1'b0 && next_acc[31] == 1'b1)
                             overflow <= 1'b1;

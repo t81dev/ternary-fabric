@@ -45,6 +45,8 @@ ALL_HW_SIM = $(BIN_DIR)/fabric_tb.vvp
 
 all: directories $(ALL_LIBS) $(ALL_C_BINS) python_ext hw_sim
 
+hw_sim: $(ALL_HW_SIM)
+
 directories:
 	mkdir -p $(BIN_DIR)
 

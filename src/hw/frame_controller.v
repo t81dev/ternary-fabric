@@ -19,6 +19,12 @@ module frame_controller #(
 );
 
     reg [15:0] current_depth;
+
+    // Adjust stride for T-CONV if hint is set
+    // Bits [21:20] of exec_hints: Stride (1-4)
+    wire [1:0] conv_stride = exec_hints[21:20];
+    wire [7:0] actual_stride = (exec_hints[7:0] == 8'h04) ?
+                                (lane_stride * (conv_stride + 1)) : lane_stride;
     
     // State definitions
     localparam IDLE = 2'b00;
@@ -49,13 +55,6 @@ module frame_controller #(
                     if (mem_ready) begin
                         if (current_depth < frame_depth - 1) begin
                             current_depth <= current_depth + 1;
-
-                            // Adjust stride for T-CONV if hint is set
-                            // Bits [21:20] of exec_hints: Stride (1-4)
-                            wire [1:0] conv_stride = exec_hints[21:20];
-                            wire [7:0] actual_stride = (exec_hints[7:0] == 8'h04) ?
-                                                      (lane_stride * (conv_stride + 1)) : lane_stride;
-
                             mem_addr      <= mem_addr + ((LANE_COUNT / 15) * actual_stride);
                         end else begin
                             state         <= DONE;
