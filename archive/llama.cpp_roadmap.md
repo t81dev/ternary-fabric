@@ -1,375 +1,428 @@
-# 🧭 Ternary-Fabric × llama.cpp Acceleration Roadmap
+Below is a **deep, systems-level roadmap for Strategy 4**:
+
+> **Accelerate `llama.cpp` with Ternary-Fabric by exposing Fabric as a device-level memory/compute substrate (PCIe/CXL-like), so llama.cpp runs unmodified while Fabric transparently compresses, skips, and executes.**
+
+This treats Ternary-Fabric not as a plugin, but as **a memory-centric accelerator that the OS maps into the process**.
+
+No llama.cpp source changes.
+No GGUF changes required (initially).
+Acceleration happens below the application layer.
 
 ---
 
-## Phase 0 — Positioning & Invariants
+# 🧭 Strategy 4 Roadmap — Device-Level Fabric Acceleration
 
-Before touching code, lock these invariants:
+---
 
-* llama.cpp remains **orchestrator + sampler**.
-* Ternary-Fabric is a **projection / GEMV accelerator**.
-* Only accelerate:
+## 🧱 Core Architecture
 
-  * matmul / gemv
-  * attention projections
-  * feed-forward layers
-* Never accelerate:
-
-  * tokenizer
-  * sampling
-  * softmax control
-  * KV cache logic
-
-Define success metric early:
+Target illusion:
 
 ```
-tokens/sec per watt
-bytes moved per token
-fabric_time / host_time
+llama.cpp
+   ↓
+Virtual Memory (OS)
+   ↓
+Fabric Driver (kernel / userspace)
+   ↓
+TFMBS Device (PCIe / MMIO / DMA)
+   ↓
+Ternary Execution + Memory Fabric
 ```
 
-Not FLOPs.
+llama.cpp believes it reads/writes RAM.
+Fabric actually:
 
-Deliverable:
+* compresses weights,
+* keeps them resident,
+* skips zeros,
+* executes dot products internally.
 
-* Architecture doc: `TFMBS_LLAMA_INTEGRATION.md`.
-
----
-
-## Phase 1 — Minimal Backend Hook
-
-Goal: prove Fabric can sit inside llama.cpp without changing quant formats.
-
-### Tasks
-
-1. **Add backend flag**
-
-   ```
-   --backend tfmbs
-   ```
-
-2. **Create stub backend**
-
-   ```
-   ggml_backend_tfmbs.c
-   ```
-
-3. **Intercept GEMV**
-   Replace only:
-
-   * `ggml_mul_mat`
-   * `ggml_vec_dot`
-
-   With:
-
-   ```c
-   if (use_tfmbs && supported_type(tensor)) {
-       tfmbs_dispatch(...);
-   }
-   ```
-
-4. **No acceleration yet**
-
-   * Just route calls.
-   * Verify correctness.
-
-Deliverable:
-
-* llama.cpp builds with `TFMBS_BACKEND`.
-* All tests pass with Fabric stub.
+This mirrors GPU Unified Memory / CXL.mem style systems.
 
 ---
 
-## Phase 2 — Fabric Host API Stabilization
+## Phase 0 — Define the Fabric Device Contract
 
-Goal: define how llama.cpp talks to Ternary-Fabric.
+Before code, define what Fabric *is* to the OS.
 
-### Tasks
+### Decide:
 
-Define C ABI:
+* Is Fabric:
+
+  * PCIe device?
+  * CXL.mem-like?
+  * userspace DMA engine?
+* Addressing:
+
+  * memory-mapped?
+  * ioctl-driven?
+* Operations:
+
+  * load frame
+  * execute GEMV
+  * DMA in/out
+
+### Minimal device API
+
+Conceptual:
 
 ```c
-tfmbs_init();
-tfmbs_upload_frame();
-tfmbs_run_gemv();
-tfmbs_wait();
-tfmbs_shutdown();
+FABRIC_ALLOC(size)
+FABRIC_FREE(ptr)
+FABRIC_DMA_TO(ptr, host_buf, size)
+FABRIC_DMA_FROM(host_buf, ptr, size)
+FABRIC_EXEC(opcode, args)
 ```
 
-Add:
+### Deliverable
 
-* frame metadata
-* tensor stride handling
-* async submission option
-
-Establish memory model:
-
-* weights → resident in Fabric
-* activations → streamed
-
-Deliverable:
-
-* `include/tfmbs_host.h`
-* working simulator path (even if fake at first).
+* `TFMBS_DEVICE_SPEC.md`
+* ABI for memory + execution.
 
 ---
 
-## Phase 3 — Quant-Agnostic Acceleration
+## Phase 1 — Emulated Device (User-Space First)
 
-Goal: accelerate existing quants without inventing new ones.
+Do **not** start in kernel space.
 
-Instead of defining Q2_T, use **ternary micro-decomposition**.
+Build a user-space Fabric emulator:
 
-### Tasks
+* backed by malloc,
+* logs accesses,
+* simulates:
 
-1. Support these types first:
+  * PT-5 frames,
+  * skip logic,
+  * SIMD execution.
 
-   * Q4_K
-   * Q6_K
-   * Q8_0
+Expose via:
 
-2. Decompose weights:
+* `libtfmbs_device.so`
 
-```
-W = Σ Pi * αi
-Pi ∈ {-1,0,+1}
-```
-
-Balanced ternary planes.
-
-3. Cache ternary planes per layer on Fabric:
+### Implement:
 
 ```c
-tfmbs_upload_planes(layer_id, planes);
+void *fabric_alloc(size);
+void fabric_free(void*);
+void fabric_memcpy_to(...);
+void fabric_memcpy_from(...);
+void fabric_exec_gemv(...);
 ```
 
-4. Execute:
+This becomes your reference backend.
 
-```
-for plane i:
-    tfmbs_run(Pi, x, tmp)
-    y += αi * tmp
-```
+### Deliverable
 
-Host handles accumulation + scale.
-
-5. Enable **zero-skip telemetry**.
-
-Deliverable:
-
-* First real acceleration on projection layers.
-* No GGUF changes needed.
+* Userspace Fabric runtime.
+* Test harness independent of llama.cpp.
 
 ---
 
-## Phase 4 — Residency & Reuse
+## Phase 2 — Memory Interposition Layer
 
-Goal: eliminate redundant movement.
+Now create the illusion.
 
-### Tasks
+You interpose memory so llama.cpp unknowingly uses Fabric memory.
 
-* Upload all layer weights once at model load.
-* Keep frames resident in Fabric memory.
-* Only move:
+Using:
 
-  * input activation
-  * output vector
+* `LD_PRELOAD`
 
-Add:
+Intercept:
 
-* layer → frame map
-* eviction policy for large models
-
-Deliverable:
-
-* Weight bandwidth drops dramatically.
-* Fabric becomes a memory-centric accelerator.
-
----
-
-## Phase 5 — Attention & FFN Coverage
-
-Goal: cover most runtime cost.
-
-Target kernels:
-
-| Layer                 | Offload |
-| --------------------- | ------- |
-| Q, K, V projections   | ✅       |
-| Attention output proj | ✅       |
-| FFN up / down         | ✅       |
-| Embedding lookup      | ✅       |
-
-Leave on host:
-
-* softmax
-* KV cache ops
-* sampling
-
-Add pipelining:
-
-```
-submit Q,K,V → overlap → wait → host softmax
-```
-
-Deliverable:
-
-* Majority of token time runs through Fabric.
-
----
-
-## Phase 6 — SIMD, Zero-Skip, Broadcast
-
-Goal: activate Fabric’s native advantages.
-
-### Tasks
-
-* Enable SIMD broadcast for activations.
-* Exploit:
-
-  * skip when ternary digit = 0
-  * compact PT-5 frames
-* Track:
-
-  ```
-  skip_rate
-  lanes_used
-  effective_ops
-  ```
-
-Tune quant decomposition to maximize skip density without breaking accuracy.
-
-Deliverable:
-
-* Real power + bandwidth advantage, not just compute offload.
-
----
-
-## Phase 7 — Accuracy Controls & Hybrid Mode
-
-Goal: prevent ternary from hurting quality.
-
-Add policies:
-
-```
---tfmbs-profile fast
---tfmbs-profile balanced
---tfmbs-profile accurate
+```c
+malloc
+free
+mmap
+munmap
+memcpy
+memmove
 ```
 
 Logic:
 
+* Large allocations → Fabric.
+* Weight-like regions → Fabric resident.
+* Small control buffers → normal RAM.
+
+Example:
+
 ```c
-if (error_estimate > threshold)
-    fallback_to_native();
+if (size > FABRIC_THRESHOLD)
+    return fabric_alloc(size);
+else
+    return real_malloc(size);
 ```
 
-Support mixed layers:
+And:
 
-* early layers → Fabric
-* late layers → CPU
+```c
+memcpy(dst, src, n):
+  if (is_fabric(dst) || is_fabric(src))
+      fabric_dma(...)
+  else
+      real_memcpy(...)
+```
 
-Deliverable:
+Now llama.cpp is unknowingly using Fabric-backed memory.
 
-* Stable quality with configurable performance.
+### Deliverable
+
+* `libtfmbs_intercept.so`
+* Allocation + DMA interception.
 
 ---
 
-## Phase 8 — Telemetry & Benchmarking
+## Phase 3 — Pattern Recognition for Compute
 
-Goal: make performance undeniable.
+Now Fabric needs to accelerate computation, not just memory.
 
-Add metrics:
+Observe llama.cpp behavior:
 
-* tokens/sec
-* bytes/token
-* fabric_time vs host_time
-* skip_rate
-* energy proxy
+* repeated reads of matrix rows,
+* dot product loops,
+* block quant unpacking.
 
-Benchmark:
+Use heuristics:
 
-* tiny model
-* 7B
-* sparse vs dense
+* detect stride-1 vector access,
+* detect matrix-vector reuse,
+* detect repeated row scans.
 
-Produce plots:
+When pattern matches GEMV:
+
+Instead of letting CPU touch memory:
 
 ```
-Baseline llama.cpp vs TFMBs backend
+CPU reads W, x → CPU computes
 ```
 
-Deliverable:
+You redirect:
 
-* Reproducible benchmark suite.
+```
+fabric_exec_gemv(W_frame, x, y)
+```
+
+and short-circuit the CPU loop.
+
+This is similar to how some DB engines offload scans.
+
+You don’t need to understand llama.cpp semantically — just structurally.
+
+### Deliverable
+
+* Compute interception prototype.
+* Logged “GEMV detected” events.
 
 ---
 
-## Phase 9 — Batch & Pipeline Acceleration
+## Phase 4 — Weight Residency & Compression
 
-Goal: go beyond single-token loop.
+Now activate Fabric’s real advantage.
+
+When memory is identified as weights:
+
+* convert to PT-5 ternary frames,
+* compress,
+* keep resident.
+
+From then on:
+
+* host never reloads weights,
+* Fabric handles reuse.
+
+Implement:
+
+```c
+on_first_touch(region):
+    pack_to_pt5(region)
+    mark_resident(region)
+```
+
+And future accesses hit Fabric memory, not CPU RAM.
+
+### Deliverable
+
+* Resident weight cache.
+* Compression + hydration pipeline.
+
+---
+
+## Phase 5 — Execution Injection
+
+Replace read-based compute with Fabric execution.
+
+Instead of:
+
+```
+for i: y += W[i] * x[i]
+```
+
+Do:
+
+```
+fabric_exec(GEMV, W, x, y)
+```
+
+Return result to host buffer.
+
+Host thinks memory changed.
+Fabric actually computed it.
+
+Now Ternary-Fabric is executing math transparently.
+
+### Deliverable
+
+* First end-to-end token path accelerated without llama.cpp changes.
+
+---
+
+## Phase 6 — Zero-Skip + SIMD Enablement
+
+Activate native ternary advantages:
+
+* zero digit skip,
+* SIMD broadcast of activations,
+* PT-5 dense packing.
+
+Track metrics:
+
+```
+skip_rate
+lanes_used
+bytes_moved
+fabric_cycles
+```
+
+Tune:
+
+* threshold for ternary digitization,
+* plane density.
+
+### Deliverable
+
+* Real bandwidth + compute reduction.
+
+---
+
+## Phase 7 — Paging & Eviction
+
+Large models won’t all fit.
 
 Add:
 
-* multi-token batching
-* prefetch frames
-* async submission
+* LRU for Fabric memory,
+* eviction to host RAM,
+* prefetch next layers.
 
 Pattern:
 
 ```
-submit token N+1 while host works on token N
+layer N used → keep
+layer N-2 unused → evict
 ```
 
-Deliverable:
+This mirrors GPU Unified Memory.
 
-* Higher utilization of Fabric.
+### Deliverable
 
----
-
-## Phase 10 — Public Integration Layer
-
-Goal: make this usable by others.
-
-Add:
-
-* documentation
-* example command:
-
-  ```
-  llama-cli --backend tfmbs --profile balanced
-  ```
-* model compatibility notes
-
-Deliverable:
-
-* Clean user-facing integration.
+* Stable execution on large GGUF models.
 
 ---
 
-# 🧠 Strategic Milestones
+## Phase 8 — Asynchronous Pipelining
 
-| Phase | Value              |
-| ----- | ------------------ |
-| 1     | Plumbing           |
-| 3     | First acceleration |
-| 4     | Real bandwidth win |
-| 5     | Token speedup      |
-| 6     | Energy advantage   |
-| 7     | Quality stability  |
-| 8     | Proof              |
-| 10    | Adoption           |
+Hide latency.
+
+Instead of blocking:
+
+```
+fabric_exec → wait → host
+```
+
+Use:
+
+```
+submit token N
+host works on token N-1
+fabric computes N+1
+```
+
+Add queues:
+
+```c
+fabric_submit(...)
+fabric_poll(...)
+```
+
+### Deliverable
+
+* Overlap host + Fabric execution.
 
 ---
 
-# 🔑 Core Design Principle
+## Phase 9 — Telemetry & Proof
 
-Every phase enforces the same rule:
+Instrument:
 
-> **Ternary-Fabric accelerates inner products, not intelligence.**
+* tokens/sec
+* bytes/token
+* fabric_time vs host_time
+* energy proxy
+* skip density
 
-It moves data cheaper, skips zeros, replaces multiplies with sign logic, and keeps llama.cpp sovereign over control.
+Build benchmark harness:
 
-That’s exactly aligned with your Duotronic → Fabric pivot.
+```
+baseline llama.cpp
+vs
+fabric-accelerated llama.cpp
+```
+
+Without code changes.
+
+### Deliverable
+
+* Benchmark report.
+* Performance plots.
+
+---
+
+## Phase 10 — Hardware Path (Optional, Real Device)
+
+Once software works:
+
+* expose Fabric as:
+
+  * PCIe device,
+  * CXL.mem region,
+  * mmap’able BAR.
+
+Kernel driver:
+
+* handles page faults,
+* routes DMA,
+* triggers execution.
+
+Userland remains unchanged.
+
+Now Fabric becomes a real accelerator.
+
+### Deliverable
+
+* Kernel module + hardware interface.
+
+---
+
+# 🔑 What This Strategy Gives You
+
+✅ Zero llama.cpp modifications
+✅ Fabric as memory + compute substrate
+✅ Transparent acceleration
+✅ Works with existing GGUF models
+✅ Matches Fabric’s identity as *memory fabric*
+
+Instead of being a “backend,” Fabric becomes **part of the machine**.
 
 ---
