@@ -10,19 +10,21 @@ All contributions must adhere to the **Binary Sovereignty** principle:
 * **Ternary Planes:** Store, hydrate, and transform (The "Muscle").
 * **Interface:** Communication MUST occur via **Ternary Frame Descriptors (TFDs)** as defined in `tfmbs.h`.
 
-## 2. Software & Tooling (C / Python)
+## 2. Software & ML Researchers (Python / C)
 
 * **ABI Consistency:** Any changes to data structures must begin in `include/tfmbs.h`. We use C99 for headers to ensure compatibility with embedded SOC toolchains.
-* **Golden Reference:** New kernels (e.g., T-FFT, Conv2D) must first be implemented as a Python reference script in `tools/`. This serves as the "Golden Model" for hardware verification.
-* **Python Bindings:** New hardware features must be exposed via the `pytfmbs` C-extension to ensure accessibility for AI researchers.
+* **Kernel Prototyping:** We prioritize **ML Research**. New kernels (e.g., T-LSTM, T-Attention) must first be implemented as a Python reference script in `tools/`.
+* **Benchmarking:** All new features should include a corresponding benchmark in `tools/benchmark_suite.py` to quantify performance gains.
+* **Python Bindings:** New hardware features must be exposed via the `pytfmbs` C-extension to ensure accessibility for the AI research community.
 
-## 3. Hardware RTL (Verilog)
+## 3. RTL & Hardware Engineers (Verilog)
 
-As we move into Phase 3 (FPGA/ASIC), hardware contributions must prioritize efficiency:
+As we move toward high-density synthesis, hardware contributions must prioritize efficiency:
 
 * **SIMD Modularity:** Design components at the **Lane** level. Logic should be tileable to allow the `vector_engine` to scale from 1 to 256+ lanes.
-* **Zero-Skip Enforcement:** RTL must implement operand isolation or clock gating for `00` (zero) trits. Contributions that do not demonstrate power-saving potential on sparse data will be rejected.
+* **Zero-Skip Enforcement:** RTL must implement operand isolation or clock gating for `00` (zero) trits. Contributions that do not demonstrate power-saving potential on sparse data will be scrutinized.
 * **PT-5 Compliance:** All data ingestors must use the `pt5_unpacker` hydration logic to maintain 95% bus efficiency.
+* **Synthesis Aware:** Avoid vendor-specific primitives; use behavioral wrappers where possible to maintain ASIC/FPGA portability.
 
 ## 4. Kernel Development Workflow
 

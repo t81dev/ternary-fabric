@@ -25,7 +25,10 @@ typedef enum {
     TFMBS_KERNEL_MUL      = 0x03, // Element-wise Multiplication
     TFMBS_KERNEL_CONV2D   = 0x04, // 2D Convolution (requires specific stride)
     TFMBS_KERNEL_MAXPOOL  = 0x05, // Ternary Max Pooling
-    TFMBS_KERNEL_TGEMM    = 0x06  // Ternary Matrix-Multiply
+    TFMBS_KERNEL_TGEMM    = 0x06, // Ternary Matrix-Multiply
+    TFMBS_KERNEL_CONV3D   = 0x07, // 3D Convolution
+    TFMBS_KERNEL_LSTM     = 0x08, // Ternary LSTM
+    TFMBS_KERNEL_ATTN     = 0x09  // Ternary Attention
 } tfmbs_kernel_t;
 
 /**
