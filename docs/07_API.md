@@ -20,13 +20,33 @@ Loads data via the AXI-Stream DMA interface.
 *   `data`: `bytes` object.
 
 ### `run(tfd_dict)`
-Submits a task and waits for completion.
+Submits a task and waits for completion (Synchronous).
 *   `tfd_dict`: Dictionary with keys like `frame_len`, `exec_hints`, `tile_mask`, etc.
+
+### `submit(tfd_dict)`
+Submits a task and returns immediately (Asynchronous). Returns a `task_id`.
+
+### `wait(task_id=None)`
+Blocks until the specified `task_id` (or the last submitted task) is complete.
+
+### `is_done(task_id=None)`
+Returns `True` if the specified `task_id` (or the last submitted task) has completed.
+
+### `run_batch(tfd_list)`
+Submits a list of TFDs for optimized batch execution.
 
 ### `results(tile_id=0)`
 Returns a list of 15 integers representing the accumulated results for the specified tile. Use `tile_id=-1` to get results for all tiles.
 
-## 2. Profiling Methods
+## 2. Framework & GGUF Integration
+
+### `pytfmbs.TFMBSLinear(in_features, out_features, ...)`
+A PyTorch layer that offloads GEMV operations to the Ternary Fabric. Supports automatic quantization and prefetching.
+
+### `pytfmbs.load_gguf_tensor(fabric, path, tensor_name, address)`
+Utility to load a tensor from a GGUF file directly into Fabric SRAM, with automatic dequantization and PT-5 packing.
+
+## 3. Profiling Methods
 
 ### `profile()`
 Returns a dictionary with aggregated global metrics:

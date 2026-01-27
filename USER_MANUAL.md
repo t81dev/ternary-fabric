@@ -1,11 +1,11 @@
-# Ternary Fabric User Manual (v0.1)
+# Ternary Fabric User Manual (v0.2)
 
 Welcome to the **Ternary Fabric** user manual. This documentation is designed to help hardware designers, software developers, and researchers understand and utilize the ternary-native acceleration substrate.
 
 ## 📖 Table of Contents
 
 1.  **[Project Overview](docs/00_OVERVIEW.md)**
-    What is the Ternary Fabric? Design philosophy, core innovation, and Phase 6b status.
+    What is the Ternary Fabric? Design philosophy, core innovation, and Phase 15 status.
 2.  **[Installation & Setup](docs/01_INSTALL.md)**
     Dependencies, build instructions, and environment setup.
 3.  **[Quick Start Guide](docs/02_QUICK_START.md)**
@@ -17,7 +17,7 @@ Welcome to the **Ternary Fabric** user manual. This documentation is designed to
 6.  **[TFD & Execution Hints](docs/05_TFD.md)**
     The binary interface specification, kernel flags, and packing formats.
 7.  **[Kernel Reference](docs/06_KERNELS.md)**
-    Usage details for Production (T-GEMM, T-CONV) and Experimental (T-LSTM, T-ATTN) kernels.
+    Usage details for accelerated kernels (T-GEMM, T-CONV3D, T-LSTM, T-ATTN).
 8.  **[Software API Guide](docs/07_API.md)**
     Comprehensive guide to the `pytfmbs` Python library.
 9.  **[Profiling & Optimization](docs/08_PROFILING.md)**
@@ -25,9 +25,9 @@ Welcome to the **Ternary Fabric** user manual. This documentation is designed to
 10. **[How-To Tutorials](docs/09_TUTORIALS.md)**
     Step-by-step guides for quantization, multi-tile scaling, and DMA loading.
 11. **[Appendices](docs/10_APPENDICES.md)**
-    Acronyms, PT-5 details, and Phase 6b verification reports.
+    Acronyms, PT-5 details, and Phase 15 verification reports.
 12. **[Multi-Tile Scaling](docs/11_MULTI_TILE.md)**
-    Details on Phase 11 multi-tile topology and masking.
+    Details on multi-tile topology and masking.
 13. **[PyTorch Integration](docs/12_PYTORCH.md)**
     Using the Ternary Fabric within the PyTorch deep learning framework.
 14. **[Strategy Roadmap](docs/ROADMAP.md)**
@@ -52,9 +52,9 @@ LD_PRELOAD=./libtfmbs_intercept.so ./my_app
 
 ---
 
-## 📊 Interpreting Telemetry (Phase 9)
+## 📊 Interpreting Telemetry
 
-When running with the interposer, the Fabric provides real-time telemetry to `stderr`:
+When running with the interposer or Python API, the Fabric provides real-time telemetry:
 
 *   **Zero-Skips:** The number of operations eliminated because an operand was zero. Typically 50-75% for LLM workloads.
 *   **Pool Usage:** Current consumption of the 128MB emulation pool.
@@ -63,7 +63,7 @@ When running with the interposer, the Fabric provides real-time telemetry to `st
 
 ---
 
-## 🧠 Memory Management (Phase 7 & 8)
+## 🧠 Memory Management
 
 ### LRU Paging
 The Fabric emulator manages a fixed 128MB pool of "Fabric Memory". If an allocation exceeds this or the pool is full, the system uses a **Least Recently Used (LRU)** policy to evict resident PT-5 frames. Evicted frames are transparently re-hydrated if accessed again by the host.

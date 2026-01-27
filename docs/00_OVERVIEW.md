@@ -20,22 +20,25 @@ To save bandwidth, data is stored in a high-density **PT-5** format (5 trits per
 ### Multi-Tile Scalability
 The architecture is parameterized to scale from a single tile to a large matrix of tiles. Each tile operates in lock-step, sharing a frame controller but maintaining private SRAM for local data storage and high-throughput parallel execution.
 
-## 3. Project Status (Phase 9)
+## 3. Project Status (Phase 15)
 
 The project has evolved through several key phases:
 
 *   **Phases 1-2:** Specification of the TFMBS ABI and development of the PT-5 codec.
-*   **Phase 3:** RTL design of the Vector Engine and TPE lanes.
-*   **Phase 4:** Integration with Python via `pytfmbs` and development of the quantization toolkit.
-*   **Phase 5:** Implementation of hardware profiling counters and dynamic lane masking.
-*   **Phase 6:** Multi-tile scaling, broadcast weight support, and ASIC-ready SRAM wrappers.
-*   **Phase 7:** LRU-based Paging and block eviction for large models.
-*   **Phase 8:** Asynchronous execution with a background command queue.
-*   **Phase 9 (Current):** Integrated telemetry and proof-of-concept acceleration for binary hosts.
+*   **Phase 3-4:** RTL design of the Vector Engine and integration with Python via `pytfmbs`.
+*   **Phase 5-6:** Hardware profiling, multi-tile scaling, and ASIC-ready SRAM wrappers.
+*   **Phase 7-9:** LRU-based Paging, asynchronous execution, and integrated telemetry.
+*   **Phase 10-11:** Transition to kernel-space IOCTL interface and multi-tile scaling.
+*   **Phase 12-14:** PyTorch integration, large-model batching, and native GGUF support.
+*   **Phase 15 (Current):** Native RTL acceleration for CONV3D, LSTM, and Attention kernels.
 
-## 4. Experimental Kernels
+## 4. Accelerated Hardware Kernels
 
-Beyond the core hardware kernels, the fabric currently supports experimental reference implementations for **T-Conv3D**, **T-LSTM**, and **T-Attention**. These are wired into the `pytfmbs` API and TFMBS header, allowing for software-level verification and architectural exploration before full RTL acceleration.
+As of Phase 15, the fabric supports native RTL-accelerated kernels for:
+*   **T-GEMM:** General Matrix Multiply for LLM offloading.
+*   **T-Conv3D:** 3D Convolution with squared-stride address calculation.
+*   **T-LSTM:** Recurrent ternary operations with hardware-managed state persistence.
+*   **T-Attention:** Multi-head attention projections with persistent key-value caching support.
 
 ## 5. Key Terminology
 

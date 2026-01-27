@@ -7,6 +7,7 @@ This guide covers the requirements and steps to set up the Ternary Fabric enviro
 ### Software Dependencies
 *   **Python 3.8+**
 *   **NumPy:** Used for data preparation and reference verification.
+*   **PyTorch (1.10+):** Required for `TFMBSLinear` and framework integration.
 *   **Setuptools:** Required to build the Python C-Extension.
 *   **GCC:** Needed for compiling the `pytfmbs` extension.
 
@@ -25,7 +26,7 @@ cd ternary-fabric
 
 ### Install Python Dependencies
 ```bash
-pip install numpy setuptools pytest
+pip install numpy torch setuptools pytest
 ```
 
 ### Build the `pytfmbs` Extension
