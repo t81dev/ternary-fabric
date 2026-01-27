@@ -22,7 +22,11 @@ The **Ternary Fabric** is a ternary-native memory and interconnect co-processor 
 
 ---
 
-## 🚀 Quick Start
+## 🔭 Project Vision
+
+The **Ternary Fabric** aims to redefine AI acceleration by treating ternary logic as a first-class citizen. Our vision is to provide a synthesizable, high-velocity hardware substrate that bridges the gap between binary-dominated host systems and the emergent field of Ternary Neural Networks (TNNs). By specializing in trits, we unlock optimizations (Zero-Skip, Free-Negation) that are physically impossible in binary arithmetic.
+
+## 🚀 Quick Start & Benchmarks
 
 The fastest way to get started is using the Python API.
 
@@ -31,7 +35,13 @@ The fastest way to get started is using the Python API.
     make python_ext
     ```
 
-2.  **Run an Example:**
+2.  **Run Benchmarks:**
+    Check the performance on your local system:
+    ```bash
+    python3 tools/benchmark_suite.py
+    ```
+
+3.  **Run an Example:**
     Explore the `examples/` directory for common use cases:
     ```bash
     # Basic T-GEMM operation
@@ -108,7 +118,9 @@ The Ternary Fabric achieves extreme throughput by leveraging the zero-cost natur
 
 ## 📖 Documentation
 
+*   **[Whitepaper](WHITE_PAPER.md):** Technical overview and benchmark results.
 *   **[User Manual](USER_MANUAL.md):** The central landing page for all documentation.
+*   **[Visual Architecture](docs/visuals.md):** Diagrams and workflows of the fabric.
 *   **[TFMBS Specification](specs/):** Normative definitions for the Frame Model and Bus.
 *   **[API Guide](docs/07_API.md):** Detailed documentation for the `pytfmbs` Python library.
 *   **[Hardware Guide](docs/03_HARDWARE.md):** Deep dive into RTL and architecture.

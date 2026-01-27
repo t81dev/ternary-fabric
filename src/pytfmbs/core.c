@@ -383,10 +383,14 @@ static PyObject* Fabric_run(FabricObject *self, PyObject *args) {
                 if (op_mode == TFMBS_KERNEL_CONV2D) {
                     uint32_t conv_stride = ((exec_hints >> 20) & 0x3) + 1;
                     idx = d * stride * conv_stride;
+                } else if (op_mode == TFMBS_KERNEL_CONV3D) {
+                    uint32_t conv_stride = ((exec_hints >> 20) & 0x3) + 1;
+                    // Mock 3D: Use squared stride to simulate deeper spatial traversal
+                    idx = d * stride * conv_stride * conv_stride;
                 }
                 if (idx >= 1024) continue;
 
-                uint32_t w_word = t_weight_sram[idx];
+                uint32_t w_word = t_weight_sram[d];
                 uint32_t i_word = t_input_sram[idx];
 
                 int8_t w_trits[15], i_trits[15];
@@ -412,7 +416,9 @@ static PyObject* Fabric_run(FabricObject *self, PyObject *args) {
                             t_skips[l]++;
                         } else {
                             int32_t prod = (int32_t)w * (int32_t)i;
-                            if (op_mode == TFMBS_KERNEL_DOT || op_mode == TFMBS_KERNEL_TGEMM || op_mode == TFMBS_KERNEL_CONV2D) {
+                            if (op_mode == TFMBS_KERNEL_DOT || op_mode == TFMBS_KERNEL_TGEMM ||
+                                op_mode == TFMBS_KERNEL_CONV2D || op_mode == TFMBS_KERNEL_CONV3D ||
+                                op_mode == TFMBS_KERNEL_LSTM || op_mode == TFMBS_KERNEL_ATTN) {
                                 int32_t old_res = (int32_t)t_results[l];
                                 t_results[l] += prod;
                                 if (prod > 0 && old_res > 0 && (int32_t)t_results[l] < 0) *t_overflow |= (1 << l);
@@ -435,7 +441,9 @@ static PyObject* Fabric_run(FabricObject *self, PyObject *args) {
     }
 
     while(!(regs[1] & 0x2));       
-    Py_RETURN_NONE;
+
+    // Return detailed profile as requested for TFD status mechanism
+    return Fabric_profile_detailed(self, NULL);
 }
 
 static PyMethodDef Fabric_methods[] = {
