@@ -1,0 +1,58 @@
+# 04: Memory Map & Registers
+
+The Ternary Fabric is controlled via an AXI4-Lite slave interface. The default base address in most system integrations is `0x40000000`.
+
+## 1. Control & Status Registers (Base + 0x00)
+
+| Offset | Name | Description |
+| --- | --- | --- |
+| 0x00 | `CONTROL` | Bit 0: Start (Self-clearing). Bits 15:8: Tile Mask. |
+| 0x04 | `STATUS` | Bit 0: Busy. Bit 1: Done. |
+| 0x08 | `BASE_ADDR` | SRAM offset for the current frame. |
+| 0x0C | `DEPTH` | Number of trits to process in the frame. |
+| 0x10 | `STRIDE` | Trit distance between elements. |
+| 0x14 | `EXEC_HINTS` | Kernel ID and optimization flags (See TFD Spec). |
+| 0x18 | `LANE_COUNT`| Number of active SIMD lanes (Max 15). |
+| 0x1C | `LANE_MASK` | Bitmask to enable/disable specific lanes. |
+
+## 2. Multi-Tile SRAM Regions
+
+Each tile has private address space for Weights and Inputs. Writing to these addresses loads data into the corresponding tile's local SRAM.
+
+| Address Range | Target | Description |
+| --- | --- | --- |
+| `0x1000 - 0x1FFF` | Tile 0 Weights | 1024 words (24-bit effective). |
+| `0x2000 - 0x2FFF` | Tile 0 Inputs | 1024 words. |
+| `0x3000 - 0x3FFF` | Tile 1 Weights | |
+| `0x4000 - 0x4FFF` | Tile 1 Inputs | |
+| `0x5000 - 0x5FFF` | Tile 2 Weights | |
+| `0x6000 - 0x6FFF` | Tile 2 Inputs | |
+| `0x7000 - 0x7FFF` | Tile 3 Weights | |
+| `0x8000 - 0x8FFF` | Tile 3 Inputs | |
+| **`0x9000`** | **Broadcast** | Writes to this address go to ALL Tile Weight SRAMs. |
+
+## 3. Results & Profiling (Read-Only)
+
+### Results (0x100 - 0x1FF)
+The accumulated 32-bit results for each lane and tile.
+*   **Tile 0:** `0x100 + (lane * 4)`
+*   **Tile 1:** `0x140 + (lane * 4)`
+*   **Tile 2:** `0x180 + (lane * 4)`
+*   **Tile 3:** `0x1C0 + (lane * 4)`
+
+### Global Performance Counters
+| Offset | Name | Description |
+| --- | --- | --- |
+| 0x20 | `CYCLES` | Total clock cycles spent executing the last frame. |
+| 0x24 | `UTILIZATION`| Aggregated lane-cycles (Sum of active lanes per cycle). |
+| 0x68 | `DMA_LATENCY`| Cycles spent waiting for AXI-Stream data. |
+
+### Per-Tile Profiling
+Each tile has a block of 15 counters for **Zero-Skip** events and **Active Cycles**.
+
+*   **Tile 0 Skip Counts:** `0x28 - 0x64`
+*   **Tile 1 Skip Counts:** `0x228 - 0x264`
+*   **Tile 2 Skip Counts:** `0x328 - 0x364`
+*   **Tile 3 Skip Counts:** `0x428 - 0x464`
+
+(Active cycle counters follow a similar pattern starting at offset `0x70` within each tile's profiling block).
