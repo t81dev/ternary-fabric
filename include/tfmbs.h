@@ -52,7 +52,8 @@ typedef struct {
     uint32_t flags;        /* Permissions, Coherence, and Priority flags  */
     uint32_t exec_hints;   /* Accelerator-specific kernel optimization    */
     uint8_t  version;      /* TFMBS Version (0x01 for this draft)         */
-    uint8_t  _reserved[7]; /* Reserved for future alignment               */
+    uint8_t  tile_mask;    /* Multi-tile selection mask                   */
+    uint8_t  _reserved[6]; /* Reserved for future alignment               */
 } tfmbs_tfd_t;
 
 /**
