@@ -118,10 +118,11 @@ Optimizing for models exceeding 70B+ parameters.
 *   **Deliverable:** `TFMBSSequential`, `prefetch()` API, and `run_batch` in `pytfmbs`.
 *   **Features:** Asynchronous `submit`/`wait`, multi-layer pipelining, and double-buffering support.
 
-### Phase 14 — GGUF Model Optimizations 📅
+### Phase 14 — GGUF Model Optimizations ✅
 Deep integration with the GGUF file format and llama.cpp specific optimizations.
-*   Direct loading of GGUF weight blocks into Fabric.
-*   Optimized kernels for specific llama.cpp quantization types.
+*   **Status:** Complete.
+*   **Deliverable:** `src/pytfmbs/gguf.py` and `GGUFReader`.
+*   **Features:** Direct loading of Q4_0 and F32 GGUF weight blocks into Fabric with automatic ternary conversion.
 
 ### Phase 15 — Experimental Kernel Maturation 📅
 Promotion of reference kernels to full hardware acceleration.
