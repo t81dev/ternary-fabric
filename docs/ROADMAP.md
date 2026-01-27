@@ -124,11 +124,11 @@ Deep integration with the GGUF file format and llama.cpp specific optimizations.
 *   **Deliverable:** `src/pytfmbs/gguf.py` and `GGUFReader`.
 *   **Features:** Direct loading of Q4_0 and F32 GGUF weight blocks into Fabric with automatic ternary conversion.
 
-### Phase 15 — Experimental Kernel Maturation 📅
+### Phase 15 — Experimental Kernel Maturation ✅
 Promotion of reference kernels to full hardware acceleration.
-*   **T-Conv3D:** Finalize RTL and synthesis.
-*   **T-LSTM:** Hardware state-management optimization.
-*   **T-Attention:** Native ternary multi-head attention support.
+*   **Status:** Complete.
+*   **Deliverables:** Updated `frame_controller.v` and `ternary_lane_alu.v` with native support for 3D Convolution, LSTM, and Attention kernels.
+*   **Features:** Squared-stride memory addressing for CONV3D and `BIAS_EN` driven state persistence for recurrent/attention workloads.
 
 ---
 

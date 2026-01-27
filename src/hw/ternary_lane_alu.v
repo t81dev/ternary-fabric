@@ -52,7 +52,7 @@ module ternary_lane_alu (
             end
 
             case (op_mode)
-                8'h01, 8'h04, 8'h06: begin // DOT, T-CONV, TGEMM
+                8'h01, 8'h04, 8'h06, 8'h07, 8'h08, 8'h09: begin // DOT, T-CONV, TGEMM, CONV3D, LSTM, ATTN
                     if (!skip_cycle) begin
                         // Detect overflow (simplified signed overflow)
                         if (product[1] == 1'b0 && product[0] == 1'b1 && accumulator[31] == 1'b0 && next_acc[31] == 1'b1)
