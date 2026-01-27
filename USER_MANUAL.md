@@ -26,8 +26,46 @@ Welcome to the **Ternary Fabric** user manual. This documentation is designed to
     Step-by-step guides for quantization, multi-tile scaling, and DMA loading.
 11. **[Appendices](docs/10_APPENDICES.md)**
     Acronyms, PT-5 details, and Phase 6b verification reports.
-12. **[llama.cpp Acceleration Roadmap](archive/llama.cpp_roadmap.md)**
-    Strategy for transparent device-level acceleration using Memory Interposition.
+12. **[Strategy Roadmap](docs/ROADMAP.md)**
+    The project roadmap detailing completed and future phases.
+
+---
+
+## 🛠️ Enabling Fabric Acceleration
+
+The Ternary Fabric can accelerate applications like `llama.cpp` without source code modifications using the `libtfmbs_intercept.so` interposer.
+
+### Usage
+```bash
+# Enable Fabric acceleration with CPU short-circuiting
+export FABRIC_SHORT_CIRCUIT=1
+LD_PRELOAD=./libtfmbs_intercept.so ./my_app
+```
+
+### Environment Variables
+*   `FABRIC_SHORT_CIRCUIT=1`: Enables the interposer to bypass CPU compute loops once weights are resident in the Fabric.
+*   `TFMBS_DEBUG=1`: Enables verbose logging of memory allocations and offloading events.
+
+---
+
+## 📊 Interpreting Telemetry (Phase 9)
+
+When running with the interposer, the Fabric provides real-time telemetry to `stderr`:
+
+*   **Zero-Skips:** The number of operations eliminated because an operand was zero. Typically 50-75% for LLM workloads.
+*   **Pool Usage:** Current consumption of the 128MB emulation pool.
+*   **Eviction Events:** Increments when the LRU policy frees space for new weight frames.
+*   **Async Queue:** Shows in-flight GEMVs being processed by the background worker thread.
+
+---
+
+## 🧠 Memory Management (Phase 7 & 8)
+
+### LRU Paging
+The Fabric emulator manages a fixed 128MB pool of "Fabric Memory". If an allocation exceeds this or the pool is full, the system uses a **Least Recently Used (LRU)** policy to evict resident PT-5 frames. Evicted frames are transparently re-hydrated if accessed again by the host.
+
+### Asynchronous Execution
+Compute tasks (GEMV) are submitted to a background worker thread. The host application only blocks if it attempts to access a memory buffer that has a pending Fabric operation.
 
 ---
 
@@ -37,7 +75,7 @@ Check out the `examples/` directory for runnable scripts:
 *   `multi_tile_tgemm.py`: Multi-tile and broadcast demonstration.
 *   `dma_loader_demo.py`: Using the AXI-Stream DMA path.
 *   `profiling_example.py`: Extracting hardware performance counters.
-*   `tests/mock_llama.c`: Demonstrating `LD_PRELOAD` memory redirection.
+*   `tests/mock_llama.c`: Demonstrating `LD_PRELOAD` memory redirection and Phase 5+ features.
 
 ---
 © 2026 Ternary Fabric Project. All rights reserved.

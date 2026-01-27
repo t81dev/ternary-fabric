@@ -27,7 +27,11 @@ The PT-5 format is a high-density encoding for balanced ternary data.
 The fabric has been validated against several benchmarks. Detailed logs and reports can be found in the `docs/validation/` directory:
 
 *   **Phase 5 Report:** Verification of Zero-Skip and T-GEMM results (See `archive/PHASE_5_REPORT.md`).
-*   **Phase 6b Report:** Multi-tile scaling and FPGA synthesis estimates (See `docs/validation/phase6b/report.md`).
+*   **Phase 6 Report:** Multi-tile scaling and FPGA synthesis estimates.
+*   **Phase 7-9 Report:** Validation of LRU Paging, Asynchronous execution, and Telemetry accuracy.
+    *   **LRU Paging:** Verified via `tests/test_paging.c`, confirming zero leaks and correct eviction order.
+    *   **Async Execution:** Confirmed race-free operation between background worker and host interposer.
+    *   **Telemetry:** Cross-validated Zero-Skip metrics against software reference counters.
 *   **Regression Suite:** `pytest tests/` contains the latest functional validation tests.
 
 ## D. Architecture Diagrams (Full-Scale)

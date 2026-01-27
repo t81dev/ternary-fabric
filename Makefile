@@ -31,8 +31,8 @@ directories:
 	mkdir -p $(BIN_DIR)
 
 # --- Shared Libraries ---
-$(BIN_DIR)/libtfmbs_device.so: $(SRC_DIR)/libtfmbs_device.c
-	$(CC) $(CFLAGS) -fPIC -shared -o $@ $<
+$(BIN_DIR)/libtfmbs_device.so: $(SRC_DIR)/libtfmbs_device.c $(SRC_DIR)/fabric_emulator.c $(SRC_DIR)/tfmbs_driver_mock.c
+	$(CC) $(CFLAGS) -fPIC -shared -o $@ $^
 
 $(BIN_DIR)/libtfmbs_intercept.so: $(SRC_DIR)/libtfmbs_intercept.c $(BIN_DIR)/libtfmbs_device.so
 	$(CC) $(CFLAGS) -fPIC -shared -o $@ $< -L$(BIN_DIR) -ltfmbs_device -ldl
@@ -52,6 +52,10 @@ $(BIN_DIR)/test_device: tests/test_device.c $(BIN_DIR)/libtfmbs_device.so
 
 $(BIN_DIR)/mock_llama: tests/mock_llama.c
 	$(CC) $(CFLAGS) -o $@ $<
+
+run_mock_llama: $(BIN_DIR)/mock_llama $(ALL_LIBS)
+	export FABRIC_SHORT_CIRCUIT=1; \
+	LD_LIBRARY_PATH=$(BIN_DIR) LD_PRELOAD=$(BIN_DIR)/libtfmbs_intercept.so ./$(BIN_DIR)/mock_llama
 
 # --- Python Bindings (Phase 4) ---
 python_ext:

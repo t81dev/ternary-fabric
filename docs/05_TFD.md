@@ -11,7 +11,7 @@ typedef struct {
     uint16_t packing_fmt;  /* See tfmbs_packing_t (e.g., PT-5)            */
     uint16_t lane_count;   /* Number of parallel SIMD lanes               */
     uint32_t lane_stride;  /* Trit distance between elements in a lane    */
-    uint32_t flags;        /* Permissions and Priority                    */
+    uint32_t flags;        /* Permissions, Coherence, and Paging          */
     uint32_t exec_hints;   /* Accelerator-specific kernel optimization    */
     uint8_t  version;      /* TFMBS Version                               */
     uint8_t  tile_mask;    /* Multi-tile selection mask                   */
@@ -19,7 +19,16 @@ typedef struct {
 } tfmbs_tfd_t;
 ```
 
-## 2. Execution Hints Bit-Field
+## 2. TFD Flags
+
+The `flags` field manages memory behavior and priority:
+
+*   **`0x01` (READ):** Application is allowed to read from this frame.
+*   **`0x02` (WRITE):** Application is allowed to write to this frame.
+*   **`0x08` (CRITICAL):** Abort if execution hints are not understood by the fabric.
+*   **`0x10` (PINNED):** Prevents the frame from being evicted by the LRU paging system (Phase 7).
+
+## 3. Execution Hints Bit-Field
 
 The `exec_hints` register is a 32-bit field that configures the hardware kernel and enables optimizations.
 
@@ -38,7 +47,7 @@ Bits  | Name           | Description
 30:29 | POOL_OP        | (T-POOL) 00:MAX, 01:MIN, 10:AVG
 ```
 
-## 3. Kernel ID Mapping
+## 4. Kernel ID Mapping
 
 | ID | Kernel | Function |
 | --- | --- | --- |
@@ -51,7 +60,7 @@ Bits  | Name           | Description
 | `0x08` | `LSTM`  | Ternary LSTM (Experimental). |
 | `0x09` | `ATTN`  | Ternary Attention (Experimental). |
 
-## 4. Packing Formats (`packing_fmt`)
+## 5. Packing Formats (`packing_fmt`)
 
 *   **`0x01` (PT-5):** 5 balanced trits per byte. This is the primary format supported by the hardware unpackers.
 *   **`0x02` (T2B):** 2 bits per trit (Simple encoding). Used mainly for debugging or low-density storage.

@@ -128,24 +128,29 @@ The Ternary Fabric achieves extreme throughput by leveraging the zero-cost natur
 
 ---
 
-## 🛠️ Roadmap Status: Phase 6 Milestone Reached — "The Fabric Illusion"
+## 🛠️ Roadmap Status: Phase 9 Milestone Reached — "The Autonomous Fabric"
 
-We have successfully implemented **zero-patch acceleration** for `llama.cpp` through device-level memory interposition and compute offloading.
+We have successfully implemented **zero-patch acceleration** for `llama.cpp` through device-level memory interposition, asynchronous execution, and automated memory management.
 
-*   ✅ **Hardware Base:** Multi-tile Scaling, Weight Broadcast, and Profiling (Phase 6b).
-*   ✅ **The Illusion:** Transparently redirecting `malloc`/`mmap` to the Fabric (Phase 2).
-*   ✅ **Auto-Residency:** Heuristic-based detection of weight scans and automatic PT-5 packing (Phase 4).
-*   ✅ **Compute Offload:** Transparent interception of GEMV loops with **CPU Short-Circuiting** (Phase 5).
-*   ✅ **Ternary Advantage:** Quantified operation reduction via **Zero-Skip** metrics (Phase 6).
-*   📅 **Next Steps:** Paging/LRU (Phase 7) and Async Pipelining (Phase 8).
+*   ✅ **Hardware Base:** Multi-tile Scaling, Weight Broadcast, and Profiling (Phase 6).
+*   ✅ **The Illusion:** Transparent memory redirection and CPU short-circuiting (Phases 2-5).
+*   ✅ **Paging & Eviction:** LRU-based 128MB Fabric pool management for large models (Phase 7).
+*   ✅ **Asynchronous Pipelining:** Background command queue for non-blocking execution (Phase 8).
+*   ✅ **Telemetry & Metrics:** Real-time visibility into skips, residency, and evictions (Phase 9).
+*   📅 **Next Steps:** Kernel-space device abstraction (Phase 10) and Multi-Fabric scaling (Phase 11).
 
-### 🚀 Proof-of-Concept Demo
-Running a standard GEMV workload through the interposer yields:
+### 🚀 Telemetry Preview
+Running a workload through the interposer now provides deep visibility:
 ```text
 [TFMBS] Establishing Residency (Auto-packing weights to PT-5)
-[TFMBS] Offload GEMV Detected
-[TFMBS] Done. Skips: 169,392 (64.6% operation reduction)
+[TFMBS] Offloading GEMV (Async)
 [TFMBS] Short-circuit: Jumping CPU over redundant loop.
+
+[TFMBS-Telemetry] GEMV Completed
+  - Zero-Skips: 172,401 (65.8% reduction)
+  - Pool Usage: 84.2 MB / 128 MB (65.8%)
+  - Evictions:  2
+  - Async Queue: 0 in-flight
 ```
 
 ---
