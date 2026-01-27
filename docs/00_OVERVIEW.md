@@ -29,9 +29,13 @@ The project has evolved through several key phases:
 *   **Phase 4:** Integration with Python via `pytfmbs` and development of the quantization toolkit.
 *   **Phase 5:** Implementation of hardware profiling counters and dynamic lane masking.
 *   **Phase 6a:** Extension of the kernel library (T-CONV, T-POOL) and DMA support.
-*   **Phase 6b (Current):** Multi-tile scaling, broadcast weight support, and ASIC-ready SRAM wrappers.
+*   **Phase 6b (Current):** Multi-tile scaling, broadcast weight support, and ASIC-ready SRAM wrappers. This phase marks the **production-core** readiness of the multi-tile fabric.
 
-## 4. Key Terminology
+## 4. Experimental Kernels
+
+Beyond the core hardware kernels, the fabric currently supports experimental reference implementations for **T-Conv3D**, **T-LSTM**, and **T-Attention**. These are wired into the `pytfmbs` API and TFMBS header, allowing for software-level verification and architectural exploration before full RTL acceleration.
+
+## 5. Key Terminology
 
 *   **Trit:** A ternary digit $\{-1, 0, 1\}$.
 *   **TFD:** Ternary Frame Descriptor. The control structure used to submit tasks to the fabric.

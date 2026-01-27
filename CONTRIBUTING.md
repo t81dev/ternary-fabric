@@ -21,7 +21,7 @@ All contributions must adhere to the **Binary Sovereignty** principle:
 
 As we move toward high-density synthesis, hardware contributions must prioritize efficiency:
 
-* **SIMD Modularity:** Design components at the **Lane** level. Logic should be tileable to allow the `vector_engine` to scale from 1 to 256+ lanes.
+* **SIMD Modularity:** Design components at the **Lane** and **Tile** levels. Logic should be tileable to allow the fabric to scale multi-tile (Phase 6b) and lanes to scale from 1 to 256+.
 * **Zero-Skip Enforcement:** RTL must implement operand isolation or clock gating for `00` (zero) trits. Contributions that do not demonstrate power-saving potential on sparse data will be scrutinized.
 * **PT-5 Compliance:** All data ingestors must use the `pt5_unpacker` hydration logic to maintain 95% bus efficiency.
 * **Synthesis Aware:** Avoid vendor-specific primitives; use behavioral wrappers where possible to maintain ASIC/FPGA portability.
@@ -37,7 +37,7 @@ To add a new mathematical operation to the fabric:
 ## 5. Submitting Changes
 
 1. **Fork** and **Branch** (`feature/your-feature`).
-2. **Regression Check:** Run `make all && ./test_suite.sh`.
+2. **Regression Check:** Run `pytest tests/` and `./test_suite.sh`.
 3. **Hardware Check:** Ensure `make run_sim` passes with 0 errors.
 4. **PR:** Link your pull request to the relevant phase in `ROADMAP.md`.
 

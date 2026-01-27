@@ -5,27 +5,27 @@ Welcome to the **Ternary Fabric** user manual. This documentation is designed to
 ## 📖 Table of Contents
 
 1.  **[Project Overview](docs/00_OVERVIEW.md)**
-    What is the Ternary Fabric? Design philosophy and core innovation.
+    What is the Ternary Fabric? Design philosophy, core innovation, and Phase 6b status.
 2.  **[Installation & Setup](docs/01_INSTALL.md)**
     Dependencies, build instructions, and environment setup.
 3.  **[Quick Start Guide](docs/02_QUICK_START.md)**
-    Run your first ternary operation in minutes.
+    **Start Here!** Run your first ternary operation in minutes using the Python API.
 4.  **[Hardware Architecture](docs/03_HARDWARE.md)**
-    Deep dive into Tiles, TPE Lanes, and the hydration pipeline.
+    Deep dive into Multi-Tile Topology, TPE Lanes, and the hydration pipeline.
 5.  **[Memory Map & Registers](docs/04_MEMORY_MAP.md)**
-    AXI address mapping and register definitions.
+    AXI address mapping, register definitions, and multi-tile SRAM regions.
 6.  **[TFD & Execution Hints](docs/05_TFD.md)**
-    The binary interface specification and kernel flags.
+    The binary interface specification, kernel flags, and packing formats.
 7.  **[Kernel Reference](docs/06_KERNELS.md)**
-    Usage details for T-GEMM, T-CONV, and T-POOL.
+    Usage details for Production (T-GEMM, T-CONV) and Experimental (T-LSTM, T-ATTN) kernels.
 8.  **[Software API Guide](docs/07_API.md)**
-    How to use the `pytfmbs` Python library.
+    Comprehensive guide to the `pytfmbs` Python library.
 9.  **[Profiling & Optimization](docs/08_PROFILING.md)**
-    Measuring Zero-Skip effectiveness and performance tuning.
+    Measuring Zero-Skip effectiveness and tuning for multi-tile performance.
 10. **[How-To Tutorials](docs/09_TUTORIALS.md)**
-    Quantization, multi-tile scaling, and DMA loading.
+    Step-by-step guides for quantization, multi-tile scaling, and DMA loading.
 11. **[Appendices](docs/10_APPENDICES.md)**
-    Acronyms, PT-5 details, and verification reports.
+    Acronyms, PT-5 details, and Phase 6b verification reports.
 
 ---
 

@@ -18,6 +18,7 @@ The **Ternary Fabric** is a ternary-native memory and interconnect co-processor 
     *   **Weight Broadcast:** Efficient multi-tile weight distribution for GEMM and CONV kernels.
 *   **Hydrated Frames:** Data is stored in **PT-5** format (5 trits per byte) for **95.1% storage efficiency** and hydrated into 2-bit signed logic during execution.
 *   **Rich Kernel Library:** Hardware-native support for **T-GEMM**, **T-CONV2D**, **T-MAXPOOL**, and **T-DOT**.
+*   **Experimental Kernels:** Reference-backed support for **T-Conv3D**, **T-LSTM**, and **T-Attention** in the software layer.
 *   **ASIC Ready:** Uses behavioral SRAM wrappers and standard AXI4-Lite interfaces, ready for synthesis in advanced process nodes.
 
 ---
@@ -134,6 +135,7 @@ We have successfully implemented and verified the multi-tile scaling architectur
 *   ✅ **Phase 1-4:** Specification, ABI, RTL, and AXI Integration.
 *   ✅ **Phase 5:** Kernel Extensions (T-CONV, T-POOL).
 *   ✅ **Phase 6a/b:** Multi-tile Scaling, Weight Broadcast, and Profiling API.
+*   🧪 **Experimental:** T-Conv3D, T-LSTM, and T-Attention kernels (Python reference).
 *   📅 **Next Steps:** FPGA Deployment and TNN (Ternary Neural Network) model zoo integration.
 
 ---
