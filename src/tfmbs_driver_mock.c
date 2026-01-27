@@ -49,8 +49,7 @@ int tfmbs_dev_ioctl(int fd, unsigned long request, void* arg) {
         }
         case TFMBS_IOC_SUBMIT_GEMV: {
             tfmbs_ioc_submit_gemv_t* s = (tfmbs_ioc_submit_gemv_t*)arg;
-            // Note: Emulator doesn't yet support tile_mask explicitly, it uses all lanes.
-            s->handle = (uint64_t)emu_fabric_exec_gemv_async((void*)s->weight_addr, (void*)s->input_addr, (void*)s->output_addr, s->rows, s->cols);
+            s->handle = (uint64_t)emu_fabric_exec_gemv_async((void*)s->weight_addr, (void*)s->input_addr, (void*)s->output_addr, s->rows, s->cols, s->tile_mask);
             return s->handle ? 0 : -EIO;
         }
         case TFMBS_IOC_WAIT: {
@@ -74,6 +73,14 @@ int tfmbs_dev_ioctl(int fd, unsigned long request, void* arg) {
             i->num_tiles = 4;
             i->lanes_per_tile = 15;
             i->total_pool_size = 128 * 1024 * 1024;
+            return 0;
+        }
+        case TFMBS_IOC_SUBMIT: {
+            tfmbs_tfd_t* tfd = (tfmbs_tfd_t*)arg;
+            uint8_t kernel = tfd->exec_hints & TFMBS_HINT_KERNEL_MASK;
+            printf("[TFMBS-Driver] TFD Submitted: Base=0x%lx, Kernel=0x%02x, Tiles=0x%02x\n",
+                   tfd->base_addr, kernel, tfd->tile_mask);
+            // In a real driver, this would kick off the hardware DMA/execution
             return 0;
         }
         default:

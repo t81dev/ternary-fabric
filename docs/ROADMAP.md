@@ -96,15 +96,15 @@ Real-time visibility into Fabric performance and efficiency.
 
 ## 🛠️ Current & Future Phases
 
-### Phase 10 — Hardware Path (Optional / Real Device) 🏗️
-Transition from userspace emulation to physical or simulated hardware drivers.
-*   Expose Fabric via PCIe/MMIO/CXL.
-*   Implement kernel-space page fault handling.
+### Phase 10 — Hardware Path (Mock Device Interface) ✅
+Transitioned from pure userspace emulation to a mock kernel-space driver interface.
+* Exposed Fabric via IOCTL interface (`TFMBS_IOC_SUBMIT`).
+* Implemented bit-exact Hardware Abstraction Layer (HAL).
 
-### Phase 11 — Multi-Fabric & Multi-GPU Scaling 📅
-Scale execution across multiple Fabric tiles or physical devices.
-*   Partitioned weights across multiple Fabric instances.
-*   Inter-fabric communication for reduction steps.
+### Phase 11 — Multi-Tile & Multi-GPU Scaling ✅
+Scale execution across multiple Fabric tiles within a single device.
+* Support for `tile_mask` in GEMV operations.
+* Dynamic workload partitioning across active tiles (15-60 lanes).
 
 ### Phase 12 — Framework Integration (PyTorch/TF) 📅
 Bring "Fabric Illusion" to high-level deep learning frameworks.

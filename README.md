@@ -74,9 +74,9 @@ LD_PRELOAD=./libtfmbs_intercept.so ./llama-cli -m model.gguf
 
 ## 🏗️ Project State & Architecture
 
-The project is currently in **Phase 9**, offering a high-fidelity software emulator and **ASIC-ready synthesizable RTL**.
+The project is currently in **Phase 11**, offering a high-fidelity software emulator and **ASIC-ready synthesizable RTL**.
 
-*   **Software Layer (Emulation):** Asynchronous execution, LRU-based paging, and transparent `LD_PRELOAD` interposer.
+*   **Software Layer (Emulation):** Multi-tile scaling, kernel-style IOCTLs, LRU-based paging, and transparent `LD_PRELOAD` interposer.
 *   **Hardware Layer (RTL):** Parameterized Multi-Tile SIMD architecture with AXI4-Lite control plane and Zero-Skip TPE lanes.
 
 | Configuration | Lanes | Clock | Throughput (Peak) |
