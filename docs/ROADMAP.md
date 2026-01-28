@@ -148,6 +148,15 @@ Using Phase 18 metrics to drive autonomous fabric behavior and scheduling.
     *   **Sparse-Regime Hardening:** Verified efficiency in 95-99% sparse regimes with dedicated stress benchmarks.
     *   **KPI Maturation:** Introduction of `Economic Efficiency` (Meaning / Cost) vs `Semantic Efficiency` (Meaning / Ops).
 
+### Phase 20 — Learning & Self-Tuning Fabric ✅
+Turning heuristics into a self-tuning system that optimizes its own parameters.
+*   **Status:** Complete.
+*   **Deliverables:**
+    *   **Adaptive Cost Coefficients:** Scheduler now uses a hill-climbing feedback loop to minimize the delta between projected and actual costs.
+    *   **Dynamic Scheduler Weighting:** Per-tile/per-kernel multipliers that adapt based on historical economic efficiency.
+    *   **Eviction Policy Self-Tuning:** Scoring weights (frequency, recency, success) adjust automatically to maximize residency hit rates.
+    *   **Temporal Pipeline Optimization:** Auto-tuning of async batch sizes to maximize a composite efficiency/throughput score.
+
 ---
 
 # 🔑 What This Strategy Gives You

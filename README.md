@@ -173,12 +173,12 @@ Telemetry exposes sparsity, residency, economic cost, and semantic efficiency in
 
 ## 🏗️ Project State & Architecture
 
-The project is currently in **Phase 19**, representing a **Cost-Aware Economic Fabric**:
+The project is currently in **Phase 20**, representing a **Learning & Self-Tuning Fabric**:
 
-* **Economic Introspection:** Decisions are driven by projected cost and residency rebates.
-* **Hysteresis Scheduling:** Stabilized tile selection to prevent state thrashing.
-* **Sparse-Stress Hardening:** Verified performance at 99%+ sparsity.
-* **Temporal Pipelining:** Overlapping memory hydration with compute.
+* **Adaptive Cost Modeling:** Real-time tuning of scheduler coefficients based on measured costs.
+* **Dynamic Scheduler Weighting:** Tiles "learn" kernel preferences to maximize economic efficiency.
+* **Self-Tuning Eviction:** Feedback-driven scoring protects blocks that contribute most to efficiency.
+* **Temporal Auto-Tuning:** Dynamic batch sizing to optimize the meaning-to-cost ratio.
 
 ### Architecture Layers
 

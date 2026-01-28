@@ -41,6 +41,27 @@ def plot_metrics(csv_path, output_dir="plots"):
     plt.ylabel('Total Count')
     plt.savefig(os.path.join(output_dir, 'activity_breakdown.png'))
 
+    # 4. Learning Trends (Phase 20)
+    if 'weight_cost' in df.columns and 'step' in df.columns:
+        plt.figure(figsize=(10, 6))
+        plt.plot(df['step'], df['weight_cost'], label='Weight Cost')
+        plt.plot(df['step'], df['residency_miss_cost'], label='Residency Miss Cost')
+        plt.title('Adaptive Cost Coefficients Evolution')
+        plt.xlabel('Step')
+        plt.ylabel('Coefficient Value')
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(os.path.join(output_dir, 'learning_coeffs.png'))
+
+    if 'batch_size' in df.columns:
+        plt.figure(figsize=(10, 6))
+        plt.plot(df['step'], df['batch_size'], color='purple', marker='o', linestyle='-', alpha=0.5)
+        plt.title('Dynamic Batch Size Evolution')
+        plt.xlabel('Step')
+        plt.ylabel('Batch Size')
+        plt.grid(True)
+        plt.savefig(os.path.join(output_dir, 'learning_batch.png'))
+
     print(f"Plots generated in {output_dir}/")
 
 if __name__ == "__main__":
