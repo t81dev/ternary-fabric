@@ -36,9 +36,9 @@ The `exec_hints` register is a 32-bit field that configures the hardware kernel 
 Bits  | Name           | Description
 ------|----------------|---------------------------------------------------
 07:00 | KERNEL_ID      | 01:DOT, 04:CONV2D, 05:MAXPOOL, 06:TGEMM, 07:CONV3D, 08:LSTM, 09:ATTN
-16    | BIAS_EN        | Enable post-accumulation bias (If supported)
-17    | ZERO_SKIP_EN   | Enable clock-gating for zero trits
-18    | FREE_NEG_EN    | Negate all weights during this frame
+16    | BIAS_EN        | Enable post-accumulation bias / State persistence
+17    | ZERO_SKIP_EN   | Enable **Zero-Skip** (clock-gating)
+18    | FREE_NEG_EN    | Enable **Free-Negation** (sign inversion)
 19    | WEIGHT_BRDCST  | Optimization hint for shared weights
 21:20 | STRIDE         | (T-CONV) Stride size (00:1, 01:2, etc.)
 23:22 | PAD            | (T-CONV) Padding size
