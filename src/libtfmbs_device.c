@@ -13,12 +13,12 @@ static int g_tfmbs_fd = -1;
 static int g_initialized = 0;
 
 // Phase 21: Global Orchestrator
-typedef enum { OK_GEMV, OK_LSTM, OK_LSTM_P } orch_kernel_t;
+typedef enum { OK_GEMV, OK_LSTM, OK_LSTM_P, OK_ATTN, OK_CONV3D } orch_kernel_t;
 
 typedef struct orch_task {
     orch_kernel_t type;
-    void *w, *i, *o;
-    int r, c;
+    void *w, *i, *o, *a;
+    int r, c, av;
     uint8_t tile_mask;
     volatile int dispatched;
     fabric_handle_t emu_handle;
@@ -195,6 +195,43 @@ fabric_handle_t fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, void* 
     return (fabric_handle_t)task;
 }
 
+fabric_handle_t fabric_exec_attn_async(void* q_ptr, void* k_ptr, void* v_ptr, void* o_ptr, int seq_len, int head_dim) {
+    init_device();
+    uint8_t tile_mask = 0x0F;
+    const char* mask_env = getenv("FABRIC_TILE_MASK");
+    if (mask_env) tile_mask = (uint8_t)strtol(mask_env, NULL, 0);
+
+    orch_task_t* task = malloc(sizeof(orch_task_t));
+    task->type = OK_ATTN; task->w = q_ptr; task->i = k_ptr; task->a = v_ptr; task->o = o_ptr;
+    task->r = seq_len; task->c = head_dim; task->tile_mask = tile_mask;
+    task->dispatched = 0; task->emu_handle = NULL;
+    pthread_mutex_init(&task->mutex, NULL); pthread_cond_init(&task->cond, NULL); task->next = NULL;
+    pthread_mutex_lock(&g_orch_mutex);
+    if (g_orch_tail) { g_orch_tail->next = task; g_orch_tail = task; }
+    else g_orch_head = g_orch_tail = task;
+    pthread_cond_signal(&g_orch_cond); pthread_mutex_unlock(&g_orch_mutex);
+    return (fabric_handle_t)task;
+}
+
+fabric_handle_t fabric_exec_conv3d_async(void* weight_ptr, void* input_ptr, void* output_ptr, int out_c, int in_c, int dhw) {
+    init_device();
+    uint8_t tile_mask = 0x0F;
+    const char* mask_env = getenv("FABRIC_TILE_MASK");
+    if (mask_env) tile_mask = (uint8_t)strtol(mask_env, NULL, 0);
+
+    orch_task_t* task = malloc(sizeof(orch_task_t));
+    task->type = OK_CONV3D; task->w = weight_ptr; task->i = input_ptr; task->o = output_ptr;
+    task->r = out_c; task->c = in_c; task->av = dhw;
+    task->tile_mask = tile_mask;
+    task->dispatched = 0; task->emu_handle = NULL;
+    pthread_mutex_init(&task->mutex, NULL); pthread_cond_init(&task->cond, NULL);
+    pthread_mutex_lock(&g_orch_mutex);
+    if (g_orch_tail) { g_orch_tail->next = task; g_orch_tail = task; }
+    else g_orch_head = g_orch_tail = task;
+    pthread_cond_signal(&g_orch_cond); pthread_mutex_unlock(&g_orch_mutex);
+    return (fabric_handle_t)task;
+}
+
 fabric_handle_t fabric_exec_lstm_async_id(int fabric_id, void* weight_ptr, void* input_ptr, void* output_ptr, int h_size, int i_size) {
     init_device();
     return emu_fabric_exec_lstm_async_id(fabric_id, weight_ptr, input_ptr, output_ptr, h_size, i_size, 0x0F);
@@ -289,8 +326,10 @@ static void* orchestrator_loop(void* arg) {
         if (g_orch_head == NULL) g_orch_tail = NULL;
 
         orch_task_t* lookahead[5]; int la_count = 0;
-        orch_task_t* curr = g_orch_head;
-        while (curr && la_count < 5) { lookahead[la_count++] = curr; curr = curr->next; }
+        if (!getenv("TFMBS_DISABLE_LOOKAHEAD")) {
+            orch_task_t* curr = g_orch_head;
+            while (curr && la_count < 5) { lookahead[la_count++] = curr; curr = curr->next; }
+        }
         pthread_mutex_unlock(&g_orch_mutex);
 
         // Predictive Scheduler: Window 5
@@ -330,9 +369,12 @@ static void* orchestrator_loop(void* arg) {
         if (task->type == OK_GEMV) task->emu_handle = emu_fabric_exec_gemv_async_id(best_fid, task->w, task->i, task->o, task->r, task->c, task->tile_mask);
         else if (task->type == OK_LSTM) task->emu_handle = emu_fabric_exec_lstm_async_id(best_fid, task->w, task->i, task->o, task->r, task->c, task->tile_mask);
         else if (task->type == OK_LSTM_P) task->emu_handle = emu_fabric_exec_lstm_persistent_async(task->w, task->i, task->o, task->r, task->c, task->tile_mask);
+        else if (task->type == OK_ATTN) task->emu_handle = emu_fabric_exec_attn_async_id(best_fid, task->w, task->i, task->a, task->o, task->r, task->c, task->tile_mask);
+        else if (task->type == OK_CONV3D) task->emu_handle = emu_fabric_exec_conv3d_async_id(best_fid, task->w, task->i, task->o, task->r, task->c, task->av, task->tile_mask);
 
         // Update output residency
-        register_residency(task->o, best_fid, (task->type == OK_GEMV ? task->r * 4 : task->r * 4));
+        size_t out_sz = (task->type == OK_ATTN) ? (size_t)task->r * task->c * 4 : (size_t)task->r * 4;
+        register_residency(task->o, best_fid, out_sz);
 
         pthread_mutex_lock(&task->mutex);
         task->dispatched = 1;

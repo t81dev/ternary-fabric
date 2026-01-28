@@ -1,0 +1,6 @@
+
+--- [Synthetic] Tile Saturation Test ---
+[Mask 0x01] Cycles: 69905, Cost: 2130939.00, Eff: 1.0000, Hits: 2, Miss: 0
+[Mask 0x03] Cycles: 34952, Cost: 2130939.00, Eff: 1.0000, Hits: 4, Miss: 0
+[Mask 0x07] Cycles: 23301, Cost: 2130939.00, Eff: 1.0000, Hits: 6, Miss: 0
+[Mask 0x0f] Cycles: 17476, Cost: 2130939.00, Eff: 1.0000, Hits: 8, Miss: 0

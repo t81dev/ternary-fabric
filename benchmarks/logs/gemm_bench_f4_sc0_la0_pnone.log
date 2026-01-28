@@ -1,0 +1,7 @@
+
+--- [GEMM] Kernel Benchmark ---
+Run 0: Cost: 1781667.00, Efficiency: 0.6669, Residency Hits: 1
+Run 1: Cost: 1781667.00, Efficiency: 0.6669, Residency Hits: 2
+Run 2: Cost: 1781667.00, Efficiency: 0.6669, Residency Hits: 3
+Run 3: Cost: 1781667.00, Efficiency: 0.6669, Residency Hits: 4
+Run 4: Cost: 1781667.00, Efficiency: 0.6669, Residency Hits: 5

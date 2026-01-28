@@ -1,0 +1,7 @@
+
+--- [LSTM] Kernel Benchmark ---
+Run 0: Cost: 3561156.00, Efficiency: 0.6664, Residency Hits: 2
+Run 1: Cost: 3561156.00, Efficiency: 0.6664, Residency Hits: 4
+Run 2: Cost: 3561156.00, Efficiency: 0.6664, Residency Hits: 6
+Run 3: Cost: 3561156.00, Efficiency: 0.6664, Residency Hits: 8
+Run 4: Cost: 3561156.00, Efficiency: 0.6664, Residency Hits: 10

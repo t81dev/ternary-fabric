@@ -4,7 +4,7 @@ LDFLAGS=-L../bin -ltfmbs_device -lpthread
 
 # Reorganized Phase 18 Structure
 SYNTHETIC_BINS=synthetic/saturation synthetic/density
-GEMM_BINS=gemm/gemm_bench
+GEMM_BINS=gemm/gemm_bench gemm/attn_bench gemm/conv3d_bench
 LSTM_BINS=lstm/lstm_bench
 TEMPORAL_BINS=temporal/lstm_persistent
 

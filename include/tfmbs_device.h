@@ -48,6 +48,8 @@ void fabric_register_weight(void* ptr, size_t size);
 // Async API (Phase 8)
 fabric_handle_t fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols);
 fabric_handle_t fabric_exec_lstm_async(void* weight_ptr, void* input_ptr, void* output_ptr, int hidden_size, int input_size);
+fabric_handle_t fabric_exec_attn_async(void* q_ptr, void* k_ptr, void* v_ptr, void* o_ptr, int seq_len, int head_dim);
+fabric_handle_t fabric_exec_conv3d_async(void* weight_ptr, void* input_ptr, void* output_ptr, int out_c, int in_c, int dhw);
 int fabric_wait(fabric_handle_t handle);
 
 // Phase 18 Persistence & Telemetry
