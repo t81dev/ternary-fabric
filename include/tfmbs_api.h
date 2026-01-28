@@ -63,6 +63,11 @@ void tfmbs_sync(fabric_handle_t handle);
  */
 void tfmbs_dump_metrics_csv(const char* path);
 
+/**
+ * @brief Phase 19: Dump economic introspection metrics to a CSV file.
+ */
+void tfmbs_dump_economic_csv(const char* path);
+
 #ifdef __cplusplus
 }
 #endif

@@ -55,3 +55,7 @@ void tfmbs_sync(fabric_handle_t handle) {
 void tfmbs_dump_metrics_csv(const char* path) {
     fabric_dump_metrics_csv(path);
 }
+
+void tfmbs_dump_economic_csv(const char* path) {
+    fabric_dump_economic_csv(path);
+}

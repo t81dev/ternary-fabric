@@ -166,6 +166,12 @@ void fabric_dump_metrics_csv(const char* path) {
     emu_fabric_dump_metrics_csv(path);
 }
 
+void fabric_dump_economic_csv(const char* path) {
+    init_device();
+    if (g_tfmbs_fd >= 0) return;
+    emu_fabric_dump_economic_csv(path);
+}
+
 int fabric_wait(fabric_handle_t handle) {
     init_device();
     if (g_tfmbs_fd >= 0) {

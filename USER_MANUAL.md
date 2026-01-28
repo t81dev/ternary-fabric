@@ -71,8 +71,10 @@ If you want to avoid the overhead of the "First Scan" heuristic, you can explici
 When running with the interposer or Python API, the Fabric provides real-time telemetry:
 
 *   **Zero-Skips:** The number of operations eliminated because an operand was zero. Typically 50-75% for LLM workloads.
+*   **Semantic Efficiency:** The ratio of useful operations (`active_ops`) to total operations.
+*   **Economic Efficiency:** The ratio of useful operations to total `fabric_cost` (weighted sum of ops, memory, and residency misses).
 *   **Pool Usage:** Current consumption of the 128MB emulation pool.
-*   **Eviction Events:** Increments when the LRU policy frees space for new weight frames.
+*   **Eviction Events:** Increments when the policy (Recency + Frequency) frees space for new weight frames.
 *   **Async Queue:** Shows in-flight GEMVs being processed by the background worker thread.
 
 ---

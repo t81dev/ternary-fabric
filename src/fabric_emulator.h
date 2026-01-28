@@ -19,5 +19,6 @@ int emu_is_fabric_ptr(const void* ptr);
 void emu_fabric_lstm_bind(void* weight_ptr, void* state_ptr, uint8_t tile_mask);
 fabric_handle_t emu_fabric_exec_lstm_persistent_async(void* weight_ptr, void* input_ptr, void* state_ptr, int h_size, int i_size, uint8_t tile_mask);
 void emu_fabric_dump_metrics_csv(const char* path);
+void emu_fabric_dump_economic_csv(const char* path);
 
 #endif

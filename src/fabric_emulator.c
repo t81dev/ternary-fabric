@@ -48,6 +48,14 @@ static pthread_mutex_t g_fabric_mutex = PTHREAD_MUTEX_INITIALIZER;
 static fabric_metrics_t g_last_metrics = {.pool_total = FABRIC_POOL_SIZE};
 static fabric_metrics_t g_tile_metrics[MAX_TILES] = {0};
 
+// Phase 19 Economic Introspection
+static double g_last_projected_cost = 0;
+static double g_last_residency_rebate = 0;
+static int g_last_chosen_tile_id = -1;
+static uint8_t g_last_tile_mask = 0;
+static char g_last_kernel_name[32] = "NONE";
+static char g_last_eviction_scores[512] = "";
+
 static inline double tfmbs_compute_cost(fabric_metrics_t *m, uint32_t hints) {
     double cost =
         m->active_ops       * 1.0 +
@@ -148,18 +156,22 @@ static void update_access(void* ptr) {
     }
 }
 
-static double projected_cost(int tile_id, kernel_type_t kernel, void* w_ptr, void* i_ptr, void* o_ptr) {
+static double projected_cost(int tile_id, kernel_type_t kernel, void* w_ptr, void* i_ptr, void* o_ptr, double *out_rebate) {
     (void)kernel;
     fabric_block_t *bw = find_block(w_ptr);
     fabric_block_t *bi = find_block(i_ptr);
     (void)o_ptr;
 
     double cost = 0.0;
+    double rebate = 0.0;
     fabric_metrics_t *m = &g_tile_metrics[tile_id];
 
-    // Residency Hit Projection
-    if (bw && bw->resident && bw->tile_id == tile_id) cost -= 50.0; // High value for resident weights
-    if (bi && bi->resident && bi->tile_id == tile_id) cost -= 10.0; // Moderate value for resident inputs
+    // Residency Hit Projection (Rebates)
+    if (bw && bw->resident && bw->tile_id == tile_id) rebate += 50.0; // High value for resident weights
+    if (bi && bi->resident && bi->tile_id == tile_id) rebate += 10.0; // Moderate value for resident inputs
+
+    cost -= rebate;
+    if (out_rebate) *out_rebate = rebate;
 
     // Broadcast reuse distance (simplified)
     if (m->broadcasts > 100) cost += 5.0; // Penalize tiles that broadcast too much
@@ -167,6 +179,11 @@ static double projected_cost(int tile_id, kernel_type_t kernel, void* w_ptr, voi
     // Historical efficiency
     if (m->active_ops > 0) {
         cost -= m->semantic_efficiency * 5.0;
+    }
+
+    // Hysteresis (Phase 19): Prefer tile already assigned to the weight block
+    if (bw && bw->tile_id == tile_id) {
+        cost -= 0.5; // Small epsilon to prevent economic jitter
     }
 
     return cost;
@@ -177,9 +194,10 @@ static uint8_t tfmbs_select_tiles(kernel_type_t kernel, void* w_ptr, void* i_ptr
     if (desired_count > MAX_TILES) desired_count = MAX_TILES;
 
     double costs[MAX_TILES];
+    double rebates[MAX_TILES];
     int tile_indices[MAX_TILES];
     for (int i = 0; i < MAX_TILES; i++) {
-        costs[i] = projected_cost(i, kernel, w_ptr, i_ptr, o_ptr);
+        costs[i] = projected_cost(i, kernel, w_ptr, i_ptr, o_ptr, &rebates[i]);
         tile_indices[i] = i;
     }
 
@@ -188,16 +206,23 @@ static uint8_t tfmbs_select_tiles(kernel_type_t kernel, void* w_ptr, void* i_ptr
         for (int j = 0; j < MAX_TILES - i - 1; j++) {
             if (costs[j] > costs[j+1]) {
                 double tc = costs[j]; costs[j] = costs[j+1]; costs[j+1] = tc;
+                double tr = rebates[j]; rebates[j] = rebates[j+1]; rebates[j+1] = tr;
                 int ti = tile_indices[j]; tile_indices[j] = tile_indices[j+1]; tile_indices[j+1] = ti;
             }
         }
     }
 
+    // Update introspection
+    g_last_chosen_tile_id = tile_indices[0];
+    g_last_projected_cost = costs[0];
+    g_last_residency_rebate = rebates[0];
 
     uint8_t mask = 0;
     for (int i = 0; i < desired_count; i++) {
         mask |= (1 << tile_indices[i]);
     }
+    g_last_tile_mask = mask;
+
     if (getenv("TFMBS_DEBUG")) {
         fprintf(stderr, "[TFMBS-Device] Scheduled %d tiles. Best tile: %d (cost %.2f), mask 0x%02x\n",
                 desired_count, tile_indices[0], costs[0], mask);
@@ -283,6 +308,11 @@ static void evict_policy() {
         victim->resident = 0;
         g_last_metrics.eviction_count++;
         g_last_metrics.pool_used -= victim->size;
+
+        char score_str[64];
+        snprintf(score_str, sizeof(score_str), "%.4f ", min_score);
+        strncat(g_last_eviction_scores, score_str, sizeof(g_last_eviction_scores) - strlen(g_last_eviction_scores) - 1);
+
         printf("[TFMBS-Device] Policy-Evicted block at %p (score %.4f, size %zu)\n", victim->ptr, min_score, victim->size);
     }
 }
@@ -519,6 +549,7 @@ static int8_t g_w_trits[8000000];
 static int8_t g_i_trits[8000000];
 
 static int internal_exec_lstm(void* weight_ptr, void* input_ptr, void* output_ptr, int h_size, int i_size, uint8_t tile_mask, int persistent, uint32_t hints) {
+    strncpy(g_last_kernel_name, persistent ? "LSTM-P" : "LSTM", sizeof(g_last_kernel_name));
     void* dev_weight_ptr = to_device_ptr(weight_ptr);
     void* dev_input_ptr = to_device_ptr(input_ptr);
     void* dev_output_ptr = to_device_ptr(output_ptr);
@@ -635,20 +666,28 @@ static int internal_exec_lstm(void* weight_ptr, void* input_ptr, void* output_pt
     for (int i = 0; i < MAX_TILES; i++) {
         if (tile_mask & (1 << i)) {
             g_tile_metrics[i].fabric_cost = tfmbs_compute_cost(&g_tile_metrics[i], hints);
+            if (g_tile_metrics[i].total_ops > 0)
+                g_tile_metrics[i].semantic_efficiency = (double)g_tile_metrics[i].active_ops / g_tile_metrics[i].total_ops;
             if (g_tile_metrics[i].fabric_cost > 0)
-                g_tile_metrics[i].semantic_efficiency = (double)g_tile_metrics[i].active_ops / g_tile_metrics[i].fabric_cost;
+                g_tile_metrics[i].economic_efficiency = (double)g_tile_metrics[i].active_ops / g_tile_metrics[i].fabric_cost;
         }
     }
 
-    if (g_last_metrics.fabric_cost > 0)
-        g_last_metrics.semantic_efficiency = (double)g_last_metrics.active_ops / g_last_metrics.fabric_cost;
+    if (g_last_metrics.total_ops > 0)
+        g_last_metrics.semantic_efficiency = (double)g_last_metrics.active_ops / g_last_metrics.total_ops;
     else
         g_last_metrics.semantic_efficiency = 0.0;
+
+    if (g_last_metrics.fabric_cost > 0)
+        g_last_metrics.economic_efficiency = (double)g_last_metrics.active_ops / g_last_metrics.fabric_cost;
+    else
+        g_last_metrics.economic_efficiency = 0.0;
 
     return 0;
 }
 
 static int internal_exec_gemv(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols, uint8_t tile_mask, uint32_t hints) {
+    strncpy(g_last_kernel_name, "GEMV", sizeof(g_last_kernel_name));
     // Use device-side mappings to bypass interposer protections
     void* dev_weight_ptr = to_device_ptr(weight_ptr);
     void* dev_input_ptr = to_device_ptr(input_ptr);
@@ -753,15 +792,22 @@ static int internal_exec_gemv(void* weight_ptr, void* input_ptr, void* output_pt
     for (int i = 0; i < MAX_TILES; i++) {
         if (tile_mask & (1 << i)) {
             g_tile_metrics[i].fabric_cost = tfmbs_compute_cost(&g_tile_metrics[i], hints);
+            if (g_tile_metrics[i].total_ops > 0)
+                g_tile_metrics[i].semantic_efficiency = (double)g_tile_metrics[i].active_ops / g_tile_metrics[i].total_ops;
             if (g_tile_metrics[i].fabric_cost > 0)
-                g_tile_metrics[i].semantic_efficiency = (double)g_tile_metrics[i].active_ops / g_tile_metrics[i].fabric_cost;
+                g_tile_metrics[i].economic_efficiency = (double)g_tile_metrics[i].active_ops / g_tile_metrics[i].fabric_cost;
         }
     }
 
-    if (g_last_metrics.fabric_cost > 0)
-        g_last_metrics.semantic_efficiency = (double)g_last_metrics.active_ops / g_last_metrics.fabric_cost;
+    if (g_last_metrics.total_ops > 0)
+        g_last_metrics.semantic_efficiency = (double)g_last_metrics.active_ops / g_last_metrics.total_ops;
     else
         g_last_metrics.semantic_efficiency = 0.0;
+
+    if (g_last_metrics.fabric_cost > 0)
+        g_last_metrics.economic_efficiency = (double)g_last_metrics.active_ops / g_last_metrics.fabric_cost;
+    else
+        g_last_metrics.economic_efficiency = 0.0;
 
     return 0;
 }
@@ -919,20 +965,45 @@ fabric_handle_t emu_fabric_exec_lstm_persistent_async(void* weight_ptr, void* in
     return (fabric_handle_t)task;
 }
 
+static int g_economic_step = 0;
+
 void emu_fabric_dump_metrics_csv(const char* path) {
     int exists = access(path, F_OK) == 0;
     FILE* f = fopen(path, "a");
     if (!f) return;
     if (!exists) {
-        fprintf(f, "zero_skips,total_ops,active_ops,mem_reads,mem_writes,broadcasts,residency_hits,residency_misses,tile_local_reuse,cycles,fabric_cost,semantic_efficiency\n");
+        fprintf(f, "zero_skips,total_ops,active_ops,mem_reads,mem_writes,broadcasts,residency_hits,residency_misses,tile_local_reuse,cycles,fabric_cost,semantic_efficiency,economic_efficiency\n");
     }
     pthread_mutex_lock(&g_fabric_mutex);
-    fprintf(f, "%ld,%ld,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%ld,%.2f,%.4f\n",
+    fprintf(f, "%ld,%ld,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%ld,%.2f,%.4f,%.4f\n",
             g_last_metrics.zero_skips, g_last_metrics.total_ops, g_last_metrics.active_ops,
             g_last_metrics.mem_reads, g_last_metrics.mem_writes, g_last_metrics.broadcasts,
             g_last_metrics.residency_hits, g_last_metrics.residency_misses,
             g_last_metrics.tile_local_reuse,
-            g_last_metrics.cycles, g_last_metrics.fabric_cost, g_last_metrics.semantic_efficiency);
+            g_last_metrics.cycles, g_last_metrics.fabric_cost,
+            g_last_metrics.semantic_efficiency, g_last_metrics.economic_efficiency);
+    pthread_mutex_unlock(&g_fabric_mutex);
+    fclose(f);
+}
+
+void emu_fabric_dump_economic_csv(const char* path) {
+    int exists = access(path, F_OK) == 0;
+    FILE* f = fopen(path, "a");
+    if (!f) return;
+    if (!exists) {
+        fprintf(f, "step,kernel,tile_mask,chosen_tile_id,projected_cost,residency_rebate,eviction_scores\n");
+    }
+    pthread_mutex_lock(&g_fabric_mutex);
+    // Remove trailing space from eviction scores
+    size_t len = strlen(g_last_eviction_scores);
+    if (len > 0 && g_last_eviction_scores[len-1] == ' ') g_last_eviction_scores[len-1] = '\0';
+
+    fprintf(f, "%d,%s,0x%02x,%d,%.2f,%.2f,\"%s\"\n",
+            g_economic_step++, g_last_kernel_name, g_last_tile_mask, g_last_chosen_tile_id,
+            g_last_projected_cost, g_last_residency_rebate, g_last_eviction_scores);
+
+    // Reset for next step
+    g_last_eviction_scores[0] = '\0';
     pthread_mutex_unlock(&g_fabric_mutex);
     fclose(f);
 }
@@ -1024,7 +1095,9 @@ static void* fabric_worker_loop(void* arg) {
                         batch_size, t->kernel == KERNEL_LSTM ? "LSTM" : (t->kernel == KERNEL_LSTM_PERSISTENT ? "LSTM-Persistent" : "GEMV"));
                 fprintf(stderr, "  - Last Active Tiles: %d (mask 0x%02x)\n", active_tiles_telemetry, t->tile_mask);
                 fprintf(stderr, "  - Zero-Skips: %ld (%.1f%% reduction)\n", g_last_metrics.zero_skips, g_last_metrics.sim_cycle_reduction);
-                fprintf(stderr, "  - Cycles:     %ld (Cost: %.1f, Efficiency: %.2f)\n", g_last_metrics.cycles, g_last_metrics.fabric_cost, g_last_metrics.semantic_efficiency);
+                fprintf(stderr, "  - Cycles:     %ld (Cost: %.1f, Sem-Eff: %.2f, Econ-Eff: %.2f)\n",
+                        g_last_metrics.cycles, g_last_metrics.fabric_cost,
+                        g_last_metrics.semantic_efficiency, g_last_metrics.economic_efficiency);
                 fprintf(stderr, "  - Residency:  Hits: %lu, Misses: %lu\n", g_last_metrics.residency_hits, g_last_metrics.residency_misses);
                 fprintf(stderr, "  - Pool Usage: %zu / %zu bytes (%.1f%%)\n", g_last_metrics.pool_used, g_last_metrics.pool_total, (double)g_last_metrics.pool_used / g_last_metrics.pool_total * 100.0);
                 fprintf(stderr, "  - Evictions:  %d\n", g_last_metrics.eviction_count);
