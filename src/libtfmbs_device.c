@@ -142,6 +142,30 @@ fabric_handle_t fabric_exec_lstm_async(void* weight_ptr, void* input_ptr, void* 
     return emu_fabric_exec_lstm_async(weight_ptr, input_ptr, output_ptr, h_size, i_size, tile_mask);
 }
 
+void fabric_lstm_bind(void* weight_ptr, void* state_ptr, uint8_t tile_mask) {
+    init_device();
+    if (g_tfmbs_fd >= 0) {
+        // Hardware path for bind not yet in mock ioctl
+        return;
+    }
+    emu_fabric_lstm_bind(weight_ptr, state_ptr, tile_mask);
+}
+
+fabric_handle_t fabric_exec_lstm_persistent_async(void* weight_ptr, void* input_ptr, void* state_ptr, int h_size, int i_size, uint8_t tile_mask) {
+    init_device();
+    if (g_tfmbs_fd >= 0) {
+        // Fallback to standard submit for hardware mock
+        return fabric_exec_lstm_async(weight_ptr, input_ptr, state_ptr, h_size, i_size);
+    }
+    return emu_fabric_exec_lstm_persistent_async(weight_ptr, input_ptr, state_ptr, h_size, i_size, tile_mask);
+}
+
+void fabric_dump_metrics_csv(const char* path) {
+    init_device();
+    if (g_tfmbs_fd >= 0) return;
+    emu_fabric_dump_metrics_csv(path);
+}
+
 int fabric_wait(fabric_handle_t handle) {
     init_device();
     if (g_tfmbs_fd >= 0) {
@@ -172,6 +196,13 @@ void fabric_get_metrics(fabric_metrics_t* out_metrics) {
             out_metrics->pool_used = args.pool_used;
             out_metrics->pool_total = args.pool_total;
             out_metrics->eviction_count = args.evictions;
+            out_metrics->active_ops = args.active_ops;
+            out_metrics->mem_reads = args.mem_reads;
+            out_metrics->mem_writes = args.mem_writes;
+            out_metrics->broadcasts = args.broadcasts;
+            out_metrics->residency_hits = args.residency_hits;
+            out_metrics->residency_misses = args.residency_misses;
+
             // sim_cycle_reduction can be calculated
             if (args.total_ops > 0)
                 out_metrics->sim_cycle_reduction = (double)args.zero_skips / args.total_ops * 100.0;

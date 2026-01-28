@@ -66,6 +66,13 @@ typedef struct {
     uint32_t pool_used;
     uint32_t pool_total;
     uint32_t evictions;
+    // Phase 18
+    uint64_t active_ops;
+    uint64_t mem_reads;
+    uint64_t mem_writes;
+    uint64_t broadcasts;
+    uint64_t residency_hits;
+    uint64_t residency_misses;
 } tfmbs_ioc_metrics_t;
 
 typedef struct {

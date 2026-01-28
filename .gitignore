@@ -1,5 +1,10 @@
 # --- Compiled Binaries & Objects ---
 bin/*
+benchmarks/synthetic/saturation
+benchmarks/synthetic/density
+benchmarks/gemm/gemm_bench
+benchmarks/lstm/lstm_bench
+benchmarks/temporal/lstm_persistent
 obj_dir/*
 *.o
 *.a
