@@ -5,6 +5,7 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <time.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include "tfmbs_device.h"
@@ -21,6 +22,7 @@ typedef struct fabric_task {
     kernel_type_t kernel;
     uint32_t exec_hints;
     uint8_t tile_mask;
+    double projected_cost;
     volatile task_status_t status;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
@@ -34,6 +36,7 @@ typedef struct fabric_block {
     int busy_count;
     uint32_t last_access;
     uint32_t access_count;
+    uint32_t residency_hits;
     int tile_id;    /* Phase 18: -1 for global, 0-N for specific tile */
     int pinned;     /* Phase 18: prevent eviction */
     int resident;   /* Phase 18: whether it's currently on fabric */
@@ -55,6 +58,47 @@ static int g_last_chosen_tile_id = -1;
 static uint8_t g_last_tile_mask = 0;
 static char g_last_kernel_name[32] = "NONE";
 static char g_last_eviction_scores[512] = "";
+
+// Phase 20: Learning & Self-Tuning
+typedef struct {
+    double weight_cost;
+    double mem_read_cost;
+    double mem_write_cost;
+    double broadcast_cost;
+    double residency_miss_cost;
+} tfmbs_projection_params_t;
+
+typedef struct {
+    double tile_kernel_mult[MAX_TILES][4]; // GEMV, LSTM, LSTM-P, (unused)
+    int    kernel_exec_count[MAX_TILES][4];
+    double eviction_freq_weight;
+    double eviction_age_weight;
+    double eviction_success_weight;
+    int    dynamic_batch_size;
+    double avg_efficiency_ema;
+    double avg_throughput_ema;
+} tfmbs_learning_state_t;
+
+static tfmbs_projection_params_t g_proj_params = {
+    .weight_cost = 1.0,
+    .mem_read_cost = 5.0,
+    .mem_write_cost = 8.0,
+    .broadcast_cost = 2.0,
+    .residency_miss_cost = 6.0
+};
+
+static tfmbs_learning_state_t g_learn_state = {
+    .tile_kernel_mult = {
+        {1.0, 1.0, 1.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, {1.0, 1.0, 1.0, 1.0},
+        {1.0, 1.0, 1.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, {1.0, 1.0, 1.0, 1.0}, {1.0, 1.0, 1.0, 1.0}
+    },
+    .eviction_freq_weight = 1.0,
+    .eviction_age_weight = 1.0,
+    .eviction_success_weight = 2.0,
+    .dynamic_batch_size = 8,
+    .avg_efficiency_ema = 0.0,
+    .avg_throughput_ema = 0.0
+};
 
 static inline double tfmbs_compute_cost(fabric_metrics_t *m, uint32_t hints) {
     double cost =
@@ -112,6 +156,7 @@ static void init_fabric_pool() {
             exit(1);
         }
         __builtin_memset(g_fabric_pool_host, 0, FABRIC_POOL_SIZE);
+        srand(time(NULL));
 
         g_blocks = (fabric_block_t*)malloc(sizeof(fabric_block_t));
         g_blocks->ptr = g_fabric_pool_host;
@@ -119,6 +164,8 @@ static void init_fabric_pool() {
         g_blocks->used = 0;
         g_blocks->busy_count = 0;
         g_blocks->last_access = 0;
+        g_blocks->access_count = 0;
+        g_blocks->residency_hits = 0;
         g_blocks->tile_id = -1;
         g_blocks->pinned = 0;
         g_blocks->resident = 0;
@@ -157,29 +204,35 @@ static void update_access(void* ptr) {
 }
 
 static double projected_cost(int tile_id, kernel_type_t kernel, void* w_ptr, void* i_ptr, void* o_ptr, double *out_rebate) {
-    (void)kernel;
     fabric_block_t *bw = find_block(w_ptr);
     fabric_block_t *bi = find_block(i_ptr);
     (void)o_ptr;
 
     double cost = 0.0;
     double rebate = 0.0;
-    fabric_metrics_t *m = &g_tile_metrics[tile_id];
 
-    // Residency Hit Projection (Rebates)
-    if (bw && bw->resident && bw->tile_id == tile_id) rebate += 50.0; // High value for resident weights
-    if (bi && bi->resident && bi->tile_id == tile_id) rebate += 10.0; // Moderate value for resident inputs
+    // Estimate components of cost
+    int w_miss = (bw && bw->resident && bw->tile_id == tile_id) ? 0 : 1;
+    int i_miss = (bi && bi->resident && bi->tile_id == tile_id) ? 0 : 1;
 
-    cost -= rebate;
+    // Phase 20: Use adaptive projection parameters
+    // We estimate the components of the Ground Truth cost
+    double est_active_ops = 1000.0; // Mock average active ops per tile
+    double est_mem_reads = 0.0;
+    if (w_miss) est_mem_reads += 500.0; // Mock weight size
+    if (i_miss) est_mem_reads += 100.0; // Mock input size
+
+    cost += est_active_ops * g_proj_params.weight_cost;
+    cost += est_mem_reads * g_proj_params.mem_read_cost;
+    if (w_miss || i_miss) cost += g_proj_params.residency_miss_cost * 10.0;
+
+    // Rebate for residency hits (legacy style for out_rebate telemetry)
+    if (!w_miss) rebate += 50.0;
+    if (!i_miss) rebate += 10.0;
     if (out_rebate) *out_rebate = rebate;
 
-    // Broadcast reuse distance (simplified)
-    if (m->broadcasts > 100) cost += 5.0; // Penalize tiles that broadcast too much
-
-    // Historical efficiency
-    if (m->active_ops > 0) {
-        cost -= m->semantic_efficiency * 5.0;
-    }
+    // Favor tiles with better historical efficiency for this kernel
+    cost *= g_learn_state.tile_kernel_mult[tile_id][kernel];
 
     // Hysteresis (Phase 19): Prefer tile already assigned to the weight block
     if (bw && bw->tile_id == tile_id) {
@@ -240,6 +293,7 @@ static void track_residency(fabric_block_t* b, uint8_t tile_mask) {
             if (first_tile == -1) first_tile = i;
             if (b->resident && (b->tile_id == i || b->tile_id == -1)) {
                 g_tile_metrics[i].residency_hits++;
+                b->residency_hits++;
                 hit_any = true;
             } else {
                 g_tile_metrics[i].residency_misses++;
@@ -278,11 +332,15 @@ static double block_policy_score(fabric_block_t* b) {
     uint32_t now = g_access_counter;
     uint32_t age = now - b->last_access;
 
-    // Score = Frequency / (Age + 1)
-    double score = (double)b->access_count / (age + 1.0);
+    // Phase 20: Adaptive Eviction Scoring
+    // Score = W_freq * freq + W_recency / (age + 1) + W_success * success_rate
+    double freq = (double)b->access_count;
+    double recency = 1.0 / (age + 1.0);
+    double success_rate = (b->access_count > 0) ? (double)b->residency_hits / b->access_count : 0;
 
-    // Favor weights with assigned tiles
-    if (b->tile_id >= 0) score *= 2.0;
+    double score = g_learn_state.eviction_freq_weight * freq +
+                   g_learn_state.eviction_age_weight * recency * 10.0 +
+                   g_learn_state.eviction_success_weight * success_rate * 100.0;
 
     return score;
 }
@@ -338,6 +396,7 @@ void* emu_fabric_alloc(size_t size) {
                     new_block->tile_id = -1;
                     new_block->pinned = 0;
                     new_block->access_count = 0;
+                    new_block->residency_hits = 0;
                     new_block->resident = 0;
                     new_block->next = curr->next;
 
@@ -350,6 +409,7 @@ void* emu_fabric_alloc(size_t size) {
                 curr->pinned = 0;
                 curr->last_access = ++g_access_counter;
                 curr->access_count = 1;
+                curr->residency_hits = 0;
                 g_last_metrics.pool_used += curr->size;
                 pthread_mutex_unlock(&g_fabric_mutex);
                 return curr->ptr;
@@ -860,6 +920,7 @@ fabric_handle_t emu_fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, vo
     task->kernel = KERNEL_GEMV;
     task->exec_hints = 0; // Default
     task->tile_mask = scheduled_mask;
+    task->projected_cost = g_last_projected_cost;
     task->status = TASK_PENDING;
     pthread_mutex_init(&task->mutex, NULL);
     pthread_cond_init(&task->cond, NULL);
@@ -903,6 +964,7 @@ fabric_handle_t emu_fabric_exec_lstm_async(void* weight_ptr, void* input_ptr, vo
     task->kernel = KERNEL_LSTM;
     task->exec_hints = 0;
     task->tile_mask = scheduled_mask;
+    task->projected_cost = g_last_projected_cost;
     task->status = TASK_PENDING;
     pthread_mutex_init(&task->mutex, NULL);
     pthread_cond_init(&task->cond, NULL);
@@ -947,6 +1009,7 @@ fabric_handle_t emu_fabric_exec_lstm_persistent_async(void* weight_ptr, void* in
     task->kernel = KERNEL_LSTM_PERSISTENT;
     task->exec_hints = 0;
     task->tile_mask = scheduled_mask;
+    task->projected_cost = g_last_projected_cost;
     task->status = TASK_PENDING;
     pthread_mutex_init(&task->mutex, NULL);
     pthread_cond_init(&task->cond, NULL);
@@ -967,6 +1030,149 @@ fabric_handle_t emu_fabric_exec_lstm_persistent_async(void* weight_ptr, void* in
 
 static int g_economic_step = 0;
 
+void emu_fabric_dump_economic_csv(const char* path) {
+    int exists = access(path, F_OK) == 0;
+    FILE* f = fopen(path, "a");
+    if (!f) return;
+    if (!exists) {
+        fprintf(f, "step,kernel,tile_mask,chosen_tile_id,projected_cost,residency_rebate,batch_size,weight_cost,mem_read_cost,mem_write_cost,broadcast_cost,residency_miss_cost,tile_mult,eviction_weights,eviction_scores\n");
+    }
+    pthread_mutex_lock(&g_fabric_mutex);
+    // Remove trailing space from eviction scores
+    size_t len = strlen(g_last_eviction_scores);
+    if (len > 0 && g_last_eviction_scores[len-1] == ' ') g_last_eviction_scores[len-1] = '\0';
+
+    // Get current tile multiplier for the last chosen tile and kernel
+    double current_mult = 1.0;
+    if (g_last_chosen_tile_id >= 0) {
+        // Find kernel index
+        int k_idx = 0;
+        if (strcmp(g_last_kernel_name, "LSTM") == 0) k_idx = 1;
+        else if (strcmp(g_last_kernel_name, "LSTM-P") == 0) k_idx = 2;
+        current_mult = g_learn_state.tile_kernel_mult[g_last_chosen_tile_id][k_idx];
+    }
+
+    fprintf(f, "%d,%s,0x%02x,%d,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.4f,\"%.2f;%.2f;%.2f\",\"%s\"\n",
+            g_economic_step++, g_last_kernel_name, g_last_tile_mask, g_last_chosen_tile_id,
+            g_last_projected_cost, g_last_residency_rebate, g_learn_state.dynamic_batch_size,
+            g_proj_params.weight_cost, g_proj_params.mem_read_cost, g_proj_params.mem_write_cost,
+            g_proj_params.broadcast_cost, g_proj_params.residency_miss_cost,
+            current_mult,
+            g_learn_state.eviction_freq_weight, g_learn_state.eviction_age_weight, g_learn_state.eviction_success_weight,
+            g_last_eviction_scores);
+
+    // Reset for next step
+    g_last_eviction_scores[0] = '\0';
+    pthread_mutex_unlock(&g_fabric_mutex);
+    fclose(f);
+}
+
+static void update_learning(fabric_task_t* task, fabric_metrics_t* metrics) {
+    // 2.1 Adaptive Cost Coefficients: Minimize delta between projected and actual cost
+    double delta = metrics->fabric_cost - task->projected_cost;
+    double lr = 0.05;
+
+    pthread_mutex_lock(&g_fabric_mutex);
+    g_proj_params.weight_cost         += lr * delta * 0.05;
+    g_proj_params.mem_read_cost       += lr * delta * 0.1;
+    g_proj_params.mem_write_cost      += lr * delta * 0.1;
+    g_proj_params.broadcast_cost      += lr * delta * 0.05;
+    g_proj_params.residency_miss_cost += lr * delta * 0.2;
+
+    // Bounds: 0.1x to 5.0x of Phase 19 defaults
+    if (g_proj_params.weight_cost < 0.1) g_proj_params.weight_cost = 0.1;
+    if (g_proj_params.weight_cost > 5.0) g_proj_params.weight_cost = 5.0;
+    if (g_proj_params.mem_read_cost < 0.5) g_proj_params.mem_read_cost = 0.5;
+    if (g_proj_params.mem_read_cost > 25.0) g_proj_params.mem_read_cost = 25.0;
+    if (g_proj_params.mem_write_cost < 0.8) g_proj_params.mem_write_cost = 0.8;
+    if (g_proj_params.mem_write_cost > 40.0) g_proj_params.mem_write_cost = 40.0;
+    if (g_proj_params.broadcast_cost < 0.2) g_proj_params.broadcast_cost = 0.2;
+    if (g_proj_params.broadcast_cost > 10.0) g_proj_params.broadcast_cost = 10.0;
+    if (g_proj_params.residency_miss_cost < 0.6) g_proj_params.residency_miss_cost = 0.6;
+    if (g_proj_params.residency_miss_cost > 30.0) g_proj_params.residency_miss_cost = 30.0;
+
+    // 2.2 Dynamic Scheduler Weighting: Learn tile-kernel preferences
+    int k_idx = task->kernel;
+    for (int i = 0; i < MAX_TILES; i++) {
+        if (task->tile_mask & (1 << i)) {
+            g_learn_state.kernel_exec_count[i][k_idx]++;
+
+            // Adjust multiplier based on efficiency vs EMA
+            double current_eff = metrics->economic_efficiency;
+            if (g_learn_state.avg_efficiency_ema == 0) g_learn_state.avg_efficiency_ema = current_eff;
+
+            if (current_eff > g_learn_state.avg_efficiency_ema) {
+                // Better than average: favor this tile-kernel pair (decrease cost multiplier)
+                g_learn_state.tile_kernel_mult[i][k_idx] *= 0.98;
+            } else {
+                // Worse than average: penalize (increase cost multiplier)
+                g_learn_state.tile_kernel_mult[i][k_idx] *= 1.02;
+            }
+
+            // Apply specified decay (0.99 every 10 executions) - simplified to every execution for smoothness
+            if (g_learn_state.kernel_exec_count[i][k_idx] % 10 == 0) {
+                // Return multiplier towards 1.0
+                g_learn_state.tile_kernel_mult[i][k_idx] = 1.0 + (g_learn_state.tile_kernel_mult[i][k_idx] - 1.0) * 0.99;
+            }
+
+            // Bounds for multiplier
+            if (g_learn_state.tile_kernel_mult[i][k_idx] < 0.5) g_learn_state.tile_kernel_mult[i][k_idx] = 0.5;
+            if (g_learn_state.tile_kernel_mult[i][k_idx] > 2.0) g_learn_state.tile_kernel_mult[i][k_idx] = 2.0;
+        }
+    }
+
+    // 2.3 Eviction Policy Self-Tuning
+    if (metrics->residency_misses > 0) {
+        // We are missing too much, increase protection for successful/frequent blocks
+        g_learn_state.eviction_success_weight += 0.01 * metrics->residency_misses;
+        g_learn_state.eviction_freq_weight += 0.01;
+    } else if (metrics->residency_hits > 10) {
+        // High hit rate, maybe we can afford to be more aggressive (decay weights)
+        g_learn_state.eviction_success_weight *= 0.999;
+        g_learn_state.eviction_freq_weight *= 0.999;
+    }
+
+    // Update Global EMA
+    g_learn_state.avg_efficiency_ema = 0.9 * g_learn_state.avg_efficiency_ema + 0.1 * metrics->economic_efficiency;
+    double current_throughput = (metrics->cycles > 0) ? (double)metrics->active_ops / metrics->cycles : 0;
+    g_learn_state.avg_throughput_ema = 0.9 * g_learn_state.avg_throughput_ema + 0.1 * current_throughput;
+
+    pthread_mutex_unlock(&g_fabric_mutex);
+
+    if (getenv("TFMBS_ECONOMIC_LOG")) {
+        emu_fabric_dump_economic_csv(getenv("TFMBS_ECONOMIC_LOG"));
+    }
+}
+
+static void update_batch_tuning(int last_batch_size) {
+    static double last_score = 0;
+    static int last_size = 8;
+
+    pthread_mutex_lock(&g_fabric_mutex);
+    // Composite score: 0.7 * efficiency + 0.3 * normalized_throughput
+    // Throughput is roughly 0-60 lanes, so normalize by 60.
+    double current_score = 0.7 * g_learn_state.avg_efficiency_ema + 0.3 * (g_learn_state.avg_throughput_ema / 60.0);
+
+    if (last_score > 0 && last_batch_size != last_size) {
+        if (current_score > last_score) {
+            // Direction was good
+            if (last_batch_size > last_size) g_learn_state.dynamic_batch_size++;
+            else g_learn_state.dynamic_batch_size--;
+        } else if (current_score < last_score) {
+            // Direction was bad
+            if (last_batch_size > last_size) g_learn_state.dynamic_batch_size--;
+            else g_learn_state.dynamic_batch_size++;
+        }
+    }
+
+    if (g_learn_state.dynamic_batch_size < 1) g_learn_state.dynamic_batch_size = 1;
+    if (g_learn_state.dynamic_batch_size > 32) g_learn_state.dynamic_batch_size = 32;
+
+    last_score = current_score;
+    last_size = last_batch_size;
+    pthread_mutex_unlock(&g_fabric_mutex);
+}
+
 void emu_fabric_dump_metrics_csv(const char* path) {
     int exists = access(path, F_OK) == 0;
     FILE* f = fopen(path, "a");
@@ -982,28 +1188,6 @@ void emu_fabric_dump_metrics_csv(const char* path) {
             g_last_metrics.tile_local_reuse,
             g_last_metrics.cycles, g_last_metrics.fabric_cost,
             g_last_metrics.semantic_efficiency, g_last_metrics.economic_efficiency);
-    pthread_mutex_unlock(&g_fabric_mutex);
-    fclose(f);
-}
-
-void emu_fabric_dump_economic_csv(const char* path) {
-    int exists = access(path, F_OK) == 0;
-    FILE* f = fopen(path, "a");
-    if (!f) return;
-    if (!exists) {
-        fprintf(f, "step,kernel,tile_mask,chosen_tile_id,projected_cost,residency_rebate,eviction_scores\n");
-    }
-    pthread_mutex_lock(&g_fabric_mutex);
-    // Remove trailing space from eviction scores
-    size_t len = strlen(g_last_eviction_scores);
-    if (len > 0 && g_last_eviction_scores[len-1] == ' ') g_last_eviction_scores[len-1] = '\0';
-
-    fprintf(f, "%d,%s,0x%02x,%d,%.2f,%.2f,\"%s\"\n",
-            g_economic_step++, g_last_kernel_name, g_last_tile_mask, g_last_chosen_tile_id,
-            g_last_projected_cost, g_last_residency_rebate, g_last_eviction_scores);
-
-    // Reset for next step
-    g_last_eviction_scores[0] = '\0';
     pthread_mutex_unlock(&g_fabric_mutex);
     fclose(f);
 }
@@ -1039,9 +1223,18 @@ static void* fabric_worker_loop(void* arg) {
         }
 
         // Batch tasks of the same type
-        fabric_task_t* batch[8];
+        fabric_task_t* batch[32];
         int batch_size = 0;
-        while (g_queue_head && batch_size < 8) {
+        int max_b = g_learn_state.dynamic_batch_size;
+
+        // Phase 20: Batch size exploration (5% chance)
+        if (rand() % 100 < 5) {
+            max_b += (rand() % 2 == 0) ? 1 : -1;
+            if (max_b < 1) max_b = 1;
+            if (max_b > 32) max_b = 32;
+        }
+
+        while (g_queue_head && batch_size < max_b) {
             if (g_queue_head->status == TASK_SHUTDOWN) break;
             if (batch_size > 0 && g_queue_head->kernel != batch[0]->kernel) break;
 
@@ -1072,6 +1265,9 @@ static void* fabric_worker_loop(void* arg) {
             } else {
                 internal_exec_gemv(t->weight_ptr, t->input_ptr, t->output_ptr, t->rows, t->cols, t->tile_mask, t->exec_hints);
             }
+
+            // Phase 20: Feedback Loop
+            update_learning(t, &g_last_metrics);
 
             // Simulate overlapping memory + compute in batch (Pipelining)
             if (batch_size > 1) {
@@ -1108,6 +1304,8 @@ static void* fabric_worker_loop(void* arg) {
             pthread_cond_broadcast(&t->cond);
             pthread_mutex_unlock(&t->mutex);
         }
+        // Phase 20: Tune batching
+        update_batch_tuning(batch_size);
     }
     return NULL;
 }

@@ -53,6 +53,7 @@ Ternary Fabric sits at the intersection of Ternary Neural Networks (TNNs) and do
 As of Phase 15, the Ternary Fabric has achieved deep integration with high-level frameworks like PyTorch and native hardware acceleration for complex structures.
 - **PyTorch Integration:** The `TFMBSLinear` module enables seamless acceleration of deep learning models with automatic quantization and residency management.
 - **Native RTL Kernels:** Recurrent and attention-based structures, including **T-LSTM**, **T-Attention**, and **T-CONV3D**, are now natively supported in hardware, providing extreme throughput for diverse AI workloads.
+- **Learning & Self-Tuning (Phase 20):** The fabric now includes a data-driven adaptation layer that autonomously optimizes cost coefficients, scheduling multipliers, and eviction priorities in real-time, maximizing economic efficiency for dynamic workloads.
 
 ## 6. Conclusion
 The Ternary Fabric provides a scalable, efficient, and high-throughput substrate for the next generation of ternary-quantized neural networks. The successful completion of Phase 15 demonstrates that ternary-native computing can scale to meet the demands of modern AI, from LLMs to computer vision, while maintaining a fraction of the power and area overhead of binary systems.
