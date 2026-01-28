@@ -10,6 +10,7 @@
 #include "tfmbs_device.h"
 
 #define FABRIC_POOL_SIZE (128 * 1024 * 1024) // 128 MB for emulation
+#define MAX_TILES 8
 
 typedef enum { TASK_PENDING, TASK_RUNNING, TASK_DONE, TASK_SHUTDOWN } task_status_t;
 typedef enum { KERNEL_GEMV, KERNEL_LSTM, KERNEL_LSTM_PERSISTENT } kernel_type_t;
@@ -18,6 +19,7 @@ typedef struct fabric_task {
     void *weight_ptr, *input_ptr, *output_ptr;
     int rows, cols;
     kernel_type_t kernel;
+    uint32_t exec_hints;
     uint8_t tile_mask;
     volatile task_status_t status;
     pthread_mutex_t mutex;
@@ -31,6 +33,7 @@ typedef struct fabric_block {
     int used;
     int busy_count;
     uint32_t last_access;
+    uint32_t access_count;
     int tile_id;    /* Phase 18: -1 for global, 0-N for specific tile */
     int pinned;     /* Phase 18: prevent eviction */
     int resident;   /* Phase 18: whether it's currently on fabric */
@@ -43,14 +46,18 @@ static fabric_block_t* g_blocks = NULL;
 static uint32_t g_access_counter = 0;
 static pthread_mutex_t g_fabric_mutex = PTHREAD_MUTEX_INITIALIZER;
 static fabric_metrics_t g_last_metrics = {.pool_total = FABRIC_POOL_SIZE};
+static fabric_metrics_t g_tile_metrics[MAX_TILES] = {0};
 
-static inline double tfmbs_compute_cost(fabric_metrics_t *m) {
-    return
+static inline double tfmbs_compute_cost(fabric_metrics_t *m, uint32_t hints) {
+    double cost =
         m->active_ops       * 1.0 +
         m->mem_reads        * 5.0 +
         m->mem_writes       * 8.0 +
         m->broadcasts       * 2.0 +
         m->residency_misses * 6.0;
+
+    if (hints & TFMBS_HINT_FUSED) cost *= 0.7;
+    return cost;
 }
 
 static fabric_task_t *g_queue_head = NULL, *g_queue_tail = NULL;
@@ -120,17 +127,6 @@ static void init_fabric_pool() {
     }
 }
 
-static void update_access(void* ptr) {
-    fabric_block_t* curr = g_blocks;
-    while (curr) {
-        if (curr->ptr == ptr) {
-            curr->last_access = ++g_access_counter;
-            return;
-        }
-        curr = curr->next;
-    }
-}
-
 static fabric_block_t* find_block(void* ptr) {
     fabric_block_t* curr = g_blocks;
     while (curr) {
@@ -138,6 +134,106 @@ static fabric_block_t* find_block(void* ptr) {
         curr = curr->next;
     }
     return NULL;
+}
+
+static void update_access(void* ptr) {
+    fabric_block_t* curr = g_blocks;
+    while (curr) {
+        if (curr->ptr == ptr) {
+            curr->last_access = ++g_access_counter;
+            curr->access_count++;
+            return;
+        }
+        curr = curr->next;
+    }
+}
+
+static double projected_cost(int tile_id, kernel_type_t kernel, void* w_ptr, void* i_ptr, void* o_ptr) {
+    (void)kernel;
+    fabric_block_t *bw = find_block(w_ptr);
+    fabric_block_t *bi = find_block(i_ptr);
+    (void)o_ptr;
+
+    double cost = 0.0;
+    fabric_metrics_t *m = &g_tile_metrics[tile_id];
+
+    // Residency Hit Projection
+    if (bw && bw->resident && bw->tile_id == tile_id) cost -= 50.0; // High value for resident weights
+    if (bi && bi->resident && bi->tile_id == tile_id) cost -= 10.0; // Moderate value for resident inputs
+
+    // Broadcast reuse distance (simplified)
+    if (m->broadcasts > 100) cost += 5.0; // Penalize tiles that broadcast too much
+
+    // Historical efficiency
+    if (m->active_ops > 0) {
+        cost -= m->semantic_efficiency * 5.0;
+    }
+
+    return cost;
+}
+
+static uint8_t tfmbs_select_tiles(kernel_type_t kernel, void* w_ptr, void* i_ptr, void* o_ptr, int desired_count) {
+    if (desired_count <= 0) desired_count = 1;
+    if (desired_count > MAX_TILES) desired_count = MAX_TILES;
+
+    double costs[MAX_TILES];
+    int tile_indices[MAX_TILES];
+    for (int i = 0; i < MAX_TILES; i++) {
+        costs[i] = projected_cost(i, kernel, w_ptr, i_ptr, o_ptr);
+        tile_indices[i] = i;
+    }
+
+    // Sort tiles by cost (Ascending: lower cost first)
+    for (int i = 0; i < MAX_TILES - 1; i++) {
+        for (int j = 0; j < MAX_TILES - i - 1; j++) {
+            if (costs[j] > costs[j+1]) {
+                double tc = costs[j]; costs[j] = costs[j+1]; costs[j+1] = tc;
+                int ti = tile_indices[j]; tile_indices[j] = tile_indices[j+1]; tile_indices[j+1] = ti;
+            }
+        }
+    }
+
+
+    uint8_t mask = 0;
+    for (int i = 0; i < desired_count; i++) {
+        mask |= (1 << tile_indices[i]);
+    }
+    if (getenv("TFMBS_DEBUG")) {
+        fprintf(stderr, "[TFMBS-Device] Scheduled %d tiles. Best tile: %d (cost %.2f), mask 0x%02x\n",
+                desired_count, tile_indices[0], costs[0], mask);
+    }
+    return mask;
+}
+
+static void track_residency(fabric_block_t* b, uint8_t tile_mask) {
+    if (!b) return;
+    bool hit_any = false;
+    int first_tile = -1;
+
+    for (int i = 0; i < MAX_TILES; i++) {
+        if (tile_mask & (1 << i)) {
+            if (first_tile == -1) first_tile = i;
+            if (b->resident && (b->tile_id == i || b->tile_id == -1)) {
+                g_tile_metrics[i].residency_hits++;
+                hit_any = true;
+            } else {
+                g_tile_metrics[i].residency_misses++;
+            }
+        }
+    }
+
+    if (hit_any) {
+        g_last_metrics.residency_hits++;
+    } else {
+        g_last_metrics.residency_misses++;
+        b->resident = 1;
+        if (b->tile_id < 0 && first_tile != -1) {
+            b->tile_id = first_tile;
+            if (getenv("TFMBS_DEBUG")) {
+                fprintf(stderr, "[TFMBS-Device] Block at %p assigned to Tile %d (first-touch)\n", b->ptr, first_tile);
+            }
+        }
+    }
 }
 
 static void set_busy(void* ptr, int delta) {
@@ -151,25 +247,43 @@ static void set_busy(void* ptr, int delta) {
     }
 }
 
-static void evict_lru() {
-    fabric_block_t* lru_block = NULL;
-    uint32_t min_access = 0xFFFFFFFF;
+static double block_policy_score(fabric_block_t* b) {
+    if (b->pinned) return 1e18;
+
+    uint32_t now = g_access_counter;
+    uint32_t age = now - b->last_access;
+
+    // Score = Frequency / (Age + 1)
+    double score = (double)b->access_count / (age + 1.0);
+
+    // Favor weights with assigned tiles
+    if (b->tile_id >= 0) score *= 2.0;
+
+    return score;
+}
+
+static void evict_policy() {
+    fabric_block_t* victim = NULL;
+    double min_score = 1e20;
 
     fabric_block_t* curr = g_blocks;
     while (curr) {
-        if (curr->used && curr->busy_count == 0 && !curr->pinned && curr->last_access < min_access) {
-            min_access = curr->last_access;
-            lru_block = curr;
+        if (curr->used && curr->busy_count == 0 && !curr->pinned) {
+            double score = block_policy_score(curr);
+            if (score < min_score) {
+                min_score = score;
+                victim = curr;
+            }
         }
         curr = curr->next;
     }
 
-    if (lru_block) {
-        lru_block->used = 0;
-        lru_block->resident = 0;
+    if (victim) {
+        victim->used = 0;
+        victim->resident = 0;
         g_last_metrics.eviction_count++;
-        g_last_metrics.pool_used -= lru_block->size;
-        printf("[TFMBS-Device] Evicted LRU block at %p (size %zu)\n", lru_block->ptr, lru_block->size);
+        g_last_metrics.pool_used -= victim->size;
+        printf("[TFMBS-Device] Policy-Evicted block at %p (score %.4f, size %zu)\n", victim->ptr, min_score, victim->size);
     }
 }
 
@@ -193,6 +307,7 @@ void* emu_fabric_alloc(size_t size) {
                     new_block->busy_count = 0;
                     new_block->tile_id = -1;
                     new_block->pinned = 0;
+                    new_block->access_count = 0;
                     new_block->resident = 0;
                     new_block->next = curr->next;
 
@@ -204,6 +319,7 @@ void* emu_fabric_alloc(size_t size) {
                 curr->tile_id = -1;
                 curr->pinned = 0;
                 curr->last_access = ++g_access_counter;
+                curr->access_count = 1;
                 g_last_metrics.pool_used += curr->size;
                 pthread_mutex_unlock(&g_fabric_mutex);
                 return curr->ptr;
@@ -230,7 +346,7 @@ void* emu_fabric_alloc(size_t size) {
         }
 
         if (any_evictable) {
-            evict_lru();
+            evict_policy();
         } else {
             // We have some free blocks but they are not large enough or fragmented
             // and we can't evict anything else.
@@ -402,8 +518,7 @@ int emu_fabric_memcpy_from(void* dest_host, const void* src_fabric, size_t size,
 static int8_t g_w_trits[8000000];
 static int8_t g_i_trits[8000000];
 
-static int internal_exec_lstm(void* weight_ptr, void* input_ptr, void* output_ptr, int h_size, int i_size, uint8_t tile_mask, int persistent) {
-    (void)tile_mask;
+static int internal_exec_lstm(void* weight_ptr, void* input_ptr, void* output_ptr, int h_size, int i_size, uint8_t tile_mask, int persistent, uint32_t hints) {
     void* dev_weight_ptr = to_device_ptr(weight_ptr);
     void* dev_input_ptr = to_device_ptr(input_ptr);
     void* dev_output_ptr = to_device_ptr(output_ptr);
@@ -413,23 +528,18 @@ static int internal_exec_lstm(void* weight_ptr, void* input_ptr, void* output_pt
     int rows = 4 * h_size;
     int cols = i_size + h_size;
 
+    int active_tiles = 0;
+    for (int i = 0; i < 8; i++) if (tile_mask & (1 << i)) active_tiles++;
+    if (active_tiles == 0) active_tiles = 1;
+
     pthread_mutex_lock(&g_fabric_mutex);
     fabric_block_t *bw = find_block(weight_ptr);
     fabric_block_t *bi = find_block(input_ptr);
     fabric_block_t *bo = find_block(output_ptr);
 
-    if (bw) {
-        if (bw->resident) g_last_metrics.residency_hits++;
-        else { g_last_metrics.residency_misses++; bw->resident = 1; }
-    }
-    if (bi) {
-        if (bi->resident) g_last_metrics.residency_hits++;
-        else { g_last_metrics.residency_misses++; bi->resident = 1; }
-    }
-    if (bo) {
-        if (bo->resident) g_last_metrics.residency_hits++;
-        else { g_last_metrics.residency_misses++; bo->resident = 1; }
-    }
+    track_residency(bw, tile_mask);
+    track_residency(bi, tile_mask);
+    track_residency(bo, tile_mask);
     pthread_mutex_unlock(&g_fabric_mutex);
 
     // Unpack weights (limited for simulation)
@@ -484,6 +594,15 @@ static int internal_exec_lstm(void* weight_ptr, void* input_ptr, void* output_pt
     }
 
     g_last_metrics.mem_writes = rows * 4;
+
+    // Distribute basic metrics to tiles
+    for (int i = 0; i < MAX_TILES; i++) {
+        if (tile_mask & (1 << i)) {
+            g_tile_metrics[i].total_ops += g_last_metrics.total_ops / active_tiles;
+            g_tile_metrics[i].mem_reads += g_last_metrics.mem_reads / active_tiles;
+            g_tile_metrics[i].mem_writes += g_last_metrics.mem_writes / active_tiles;
+        }
+    }
     g_last_metrics.cycles = rows + cols; // Rough estimation
 
     int32_t* results = (int32_t*)dev_output_ptr;
@@ -499,8 +618,28 @@ static int internal_exec_lstm(void* weight_ptr, void* input_ptr, void* output_pt
     }
 
     g_last_metrics.active_ops = g_last_metrics.total_ops - g_last_metrics.zero_skips;
+
+    // Distribute active ops and zero skips
+    for (int i = 0; i < MAX_TILES; i++) {
+        if (tile_mask & (1 << i)) {
+            g_tile_metrics[i].active_ops += g_last_metrics.active_ops / active_tiles;
+            g_tile_metrics[i].zero_skips += g_last_metrics.zero_skips / active_tiles;
+            g_tile_metrics[i].cycles += g_last_metrics.cycles / active_tiles;
+        }
+    }
+
     g_last_metrics.sim_cycle_reduction = (double)g_last_metrics.zero_skips / g_last_metrics.total_ops * 100.0;
-    g_last_metrics.fabric_cost = tfmbs_compute_cost(&g_last_metrics);
+    g_last_metrics.fabric_cost = tfmbs_compute_cost(&g_last_metrics, hints);
+
+    // Update tile efficiency
+    for (int i = 0; i < MAX_TILES; i++) {
+        if (tile_mask & (1 << i)) {
+            g_tile_metrics[i].fabric_cost = tfmbs_compute_cost(&g_tile_metrics[i], hints);
+            if (g_tile_metrics[i].fabric_cost > 0)
+                g_tile_metrics[i].semantic_efficiency = (double)g_tile_metrics[i].active_ops / g_tile_metrics[i].fabric_cost;
+        }
+    }
+
     if (g_last_metrics.fabric_cost > 0)
         g_last_metrics.semantic_efficiency = (double)g_last_metrics.active_ops / g_last_metrics.fabric_cost;
     else
@@ -509,7 +648,7 @@ static int internal_exec_lstm(void* weight_ptr, void* input_ptr, void* output_pt
     return 0;
 }
 
-static int internal_exec_gemv(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols, uint8_t tile_mask) {
+static int internal_exec_gemv(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols, uint8_t tile_mask, uint32_t hints) {
     // Use device-side mappings to bypass interposer protections
     void* dev_weight_ptr = to_device_ptr(weight_ptr);
     void* dev_input_ptr = to_device_ptr(input_ptr);
@@ -526,22 +665,19 @@ static int internal_exec_gemv(void* weight_ptr, void* input_ptr, void* output_pt
     fabric_block_t *bo = find_block(output_ptr);
 
     // Residency and Broadcast tracking
-    if (bw) {
-        if (bw->resident) g_last_metrics.residency_hits++;
-        else { g_last_metrics.residency_misses++; bw->resident = 1; }
-    }
-    if (bi) {
-        if (bi->resident) g_last_metrics.residency_hits++;
-        else { g_last_metrics.residency_misses++; bi->resident = 1; }
-    }
-    if (bo) {
-        if (bo->resident) g_last_metrics.residency_hits++;
-        else { g_last_metrics.residency_misses++; bo->resident = 1; }
-    }
+    track_residency(bw, tile_mask);
+    track_residency(bi, tile_mask);
+    track_residency(bo, tile_mask);
 
     if (active_tiles > 1) {
         g_last_metrics.broadcasts++;
+        for (int i = 0; i < MAX_TILES; i++) {
+            if (tile_mask & (1 << i)) g_tile_metrics[i].broadcasts++;
+        }
         g_last_metrics.tile_local_reuse += (active_tiles - 1);
+        for (int i = 0; i < MAX_TILES; i++) {
+            if (tile_mask & (1 << i)) g_tile_metrics[i].tile_local_reuse++; // Approximate
+        }
     }
     pthread_mutex_unlock(&g_fabric_mutex);
 
@@ -573,6 +709,15 @@ static int internal_exec_gemv(void* weight_ptr, void* input_ptr, void* output_pt
     g_last_metrics.mem_writes = rows * 4;
     g_last_metrics.cycles = (rows * cols) / g_last_metrics.lanes_used;
 
+    // Distribute metrics to tiles
+    for (int i = 0; i < MAX_TILES; i++) {
+        if (tile_mask & (1 << i)) {
+            g_tile_metrics[i].total_ops += g_last_metrics.total_ops / active_tiles;
+            g_tile_metrics[i].mem_reads += g_last_metrics.mem_reads / active_tiles;
+            g_tile_metrics[i].mem_writes += g_last_metrics.mem_writes / active_tiles;
+        }
+    }
+
     // GEMV with Zero-Skip Emulation and Tile partitioning
     int32_t* results = (int32_t*)dev_output_ptr;
 
@@ -591,8 +736,28 @@ static int internal_exec_gemv(void* weight_ptr, void* input_ptr, void* output_pt
     }
 
     g_last_metrics.active_ops = g_last_metrics.total_ops - g_last_metrics.zero_skips;
+
+    // Distribute active ops and zero skips
+    for (int i = 0; i < MAX_TILES; i++) {
+        if (tile_mask & (1 << i)) {
+            g_tile_metrics[i].active_ops += g_last_metrics.active_ops / active_tiles;
+            g_tile_metrics[i].zero_skips += g_last_metrics.zero_skips / active_tiles;
+            g_tile_metrics[i].cycles += g_last_metrics.cycles / active_tiles;
+        }
+    }
+
     g_last_metrics.sim_cycle_reduction = (double)g_last_metrics.zero_skips / g_last_metrics.total_ops * 100.0;
-    g_last_metrics.fabric_cost = tfmbs_compute_cost(&g_last_metrics);
+    g_last_metrics.fabric_cost = tfmbs_compute_cost(&g_last_metrics, hints);
+
+    // Update tile efficiency
+    for (int i = 0; i < MAX_TILES; i++) {
+        if (tile_mask & (1 << i)) {
+            g_tile_metrics[i].fabric_cost = tfmbs_compute_cost(&g_tile_metrics[i], hints);
+            if (g_tile_metrics[i].fabric_cost > 0)
+                g_tile_metrics[i].semantic_efficiency = (double)g_tile_metrics[i].active_ops / g_tile_metrics[i].fabric_cost;
+        }
+    }
+
     if (g_last_metrics.fabric_cost > 0)
         g_last_metrics.semantic_efficiency = (double)g_last_metrics.active_ops / g_last_metrics.fabric_cost;
     else
@@ -612,16 +777,33 @@ int emu_fabric_exec_gemv(void* weight_ptr, void* input_ptr, void* output_ptr, in
     update_access(output_ptr);
     pthread_mutex_unlock(&g_fabric_mutex);
 
-    return internal_exec_gemv(weight_ptr, input_ptr, output_ptr, rows, cols, tile_mask);
+    int desired_tiles = 0;
+    for (int i = 0; i < 8; i++) if (tile_mask & (1 << i)) desired_tiles++;
+    if (desired_tiles == 0) desired_tiles = 1;
+    uint8_t scheduled_mask = tfmbs_select_tiles(KERNEL_GEMV, weight_ptr, input_ptr, output_ptr, desired_tiles);
+
+    return internal_exec_gemv(weight_ptr, input_ptr, output_ptr, rows, cols, scheduled_mask, 0);
 }
 
 int emu_fabric_exec_lstm(void* weight_ptr, void* input_ptr, void* output_ptr, int h_size, int i_size, uint8_t tile_mask) {
     if (!emu_is_fabric_ptr(weight_ptr) || !emu_is_fabric_ptr(input_ptr) || !emu_is_fabric_ptr(output_ptr)) return -1;
-    return internal_exec_lstm(weight_ptr, input_ptr, output_ptr, h_size, i_size, tile_mask, 0);
+
+    int desired_tiles = 0;
+    for (int i = 0; i < 8; i++) if (tile_mask & (1 << i)) desired_tiles++;
+    if (desired_tiles == 0) desired_tiles = 1;
+    uint8_t scheduled_mask = tfmbs_select_tiles(KERNEL_LSTM, weight_ptr, input_ptr, output_ptr, desired_tiles);
+
+    return internal_exec_lstm(weight_ptr, input_ptr, output_ptr, h_size, i_size, scheduled_mask, 0, 0);
 }
 
 fabric_handle_t emu_fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols, uint8_t tile_mask) {
     init_fabric_pool();
+
+    // Cost-Aware Scheduling
+    int desired_tiles = 0;
+    for (int i = 0; i < 8; i++) if (tile_mask & (1 << i)) desired_tiles++;
+    if (desired_tiles == 0) desired_tiles = 1;
+    uint8_t scheduled_mask = tfmbs_select_tiles(KERNEL_GEMV, weight_ptr, input_ptr, output_ptr, desired_tiles);
 
     fabric_task_t* task = (fabric_task_t*)malloc(sizeof(fabric_task_t));
     task->weight_ptr = weight_ptr;
@@ -630,7 +812,8 @@ fabric_handle_t emu_fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, vo
     task->rows = rows;
     task->cols = cols;
     task->kernel = KERNEL_GEMV;
-    task->tile_mask = tile_mask;
+    task->exec_hints = 0; // Default
+    task->tile_mask = scheduled_mask;
     task->status = TASK_PENDING;
     pthread_mutex_init(&task->mutex, NULL);
     pthread_cond_init(&task->cond, NULL);
@@ -659,6 +842,12 @@ fabric_handle_t emu_fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, vo
 
 fabric_handle_t emu_fabric_exec_lstm_async(void* weight_ptr, void* input_ptr, void* output_ptr, int h_size, int i_size, uint8_t tile_mask) {
     init_fabric_pool();
+
+    int desired_tiles = 0;
+    for (int i = 0; i < 8; i++) if (tile_mask & (1 << i)) desired_tiles++;
+    if (desired_tiles == 0) desired_tiles = 1;
+    uint8_t scheduled_mask = tfmbs_select_tiles(KERNEL_LSTM, weight_ptr, input_ptr, output_ptr, desired_tiles);
+
     fabric_task_t* task = (fabric_task_t*)malloc(sizeof(fabric_task_t));
     task->weight_ptr = weight_ptr;
     task->input_ptr = input_ptr;
@@ -666,7 +855,8 @@ fabric_handle_t emu_fabric_exec_lstm_async(void* weight_ptr, void* input_ptr, vo
     task->rows = h_size;
     task->cols = i_size;
     task->kernel = KERNEL_LSTM;
-    task->tile_mask = tile_mask;
+    task->exec_hints = 0;
+    task->tile_mask = scheduled_mask;
     task->status = TASK_PENDING;
     pthread_mutex_init(&task->mutex, NULL);
     pthread_cond_init(&task->cond, NULL);
@@ -696,6 +886,12 @@ void emu_fabric_lstm_bind(void* weight_ptr, void* state_ptr, uint8_t tile_mask) 
 
 fabric_handle_t emu_fabric_exec_lstm_persistent_async(void* weight_ptr, void* input_ptr, void* state_ptr, int h_size, int i_size, uint8_t tile_mask) {
     init_fabric_pool();
+
+    int desired_tiles = 0;
+    for (int i = 0; i < 8; i++) if (tile_mask & (1 << i)) desired_tiles++;
+    if (desired_tiles == 0) desired_tiles = 1;
+    uint8_t scheduled_mask = tfmbs_select_tiles(KERNEL_LSTM_PERSISTENT, weight_ptr, input_ptr, state_ptr, desired_tiles);
+
     fabric_task_t* task = (fabric_task_t*)malloc(sizeof(fabric_task_t));
     task->weight_ptr = weight_ptr;
     task->input_ptr = input_ptr;
@@ -703,7 +899,8 @@ fabric_handle_t emu_fabric_exec_lstm_persistent_async(void* weight_ptr, void* in
     task->rows = h_size;
     task->cols = i_size;
     task->kernel = KERNEL_LSTM_PERSISTENT;
-    task->tile_mask = tile_mask;
+    task->exec_hints = 0;
+    task->tile_mask = scheduled_mask;
     task->status = TASK_PENDING;
     pthread_mutex_init(&task->mutex, NULL);
     pthread_cond_init(&task->cond, NULL);
@@ -769,54 +966,75 @@ static void* fabric_worker_loop(void* arg) {
             pthread_mutex_unlock(&g_queue_mutex);
             break;
         }
-        g_queue_head = task->next;
-        if (g_queue_head == NULL) g_queue_tail = NULL;
+
+        // Batch tasks of the same type
+        fabric_task_t* batch[8];
+        int batch_size = 0;
+        while (g_queue_head && batch_size < 8) {
+            if (g_queue_head->status == TASK_SHUTDOWN) break;
+            if (batch_size > 0 && g_queue_head->kernel != batch[0]->kernel) break;
+
+            batch[batch_size] = g_queue_head;
+            g_queue_head = g_queue_head->next;
+            if (g_queue_head == NULL) g_queue_tail = NULL;
+            batch_size++;
+        }
         pthread_mutex_unlock(&g_queue_mutex);
 
-        pthread_mutex_lock(&task->mutex);
-        task->status = TASK_RUNNING;
-        pthread_mutex_unlock(&task->mutex);
+        for (int b = 0; b < batch_size; b++) {
+            fabric_task_t* t = batch[b];
+            pthread_mutex_lock(&t->mutex);
+            t->status = TASK_RUNNING;
+            pthread_mutex_unlock(&t->mutex);
 
-        // Update access for the blocks
-        pthread_mutex_lock(&g_fabric_mutex);
-        update_access(task->weight_ptr);
-        update_access(task->input_ptr);
-        update_access(task->output_ptr);
-        pthread_mutex_unlock(&g_fabric_mutex);
+            // Update access
+            pthread_mutex_lock(&g_fabric_mutex);
+            update_access(t->weight_ptr);
+            update_access(t->input_ptr);
+            update_access(t->output_ptr);
+            pthread_mutex_unlock(&g_fabric_mutex);
 
-        if (task->kernel == KERNEL_LSTM) {
-            internal_exec_lstm(task->weight_ptr, task->input_ptr, task->output_ptr, task->rows, task->cols, task->tile_mask, 0);
-        } else if (task->kernel == KERNEL_LSTM_PERSISTENT) {
-            internal_exec_lstm(task->weight_ptr, task->input_ptr, task->output_ptr, task->rows, task->cols, task->tile_mask, 1);
-        } else {
-            internal_exec_gemv(task->weight_ptr, task->input_ptr, task->output_ptr, task->rows, task->cols, task->tile_mask);
+            if (t->kernel == KERNEL_LSTM) {
+                internal_exec_lstm(t->weight_ptr, t->input_ptr, t->output_ptr, t->rows, t->cols, t->tile_mask, 0, t->exec_hints);
+            } else if (t->kernel == KERNEL_LSTM_PERSISTENT) {
+                internal_exec_lstm(t->weight_ptr, t->input_ptr, t->output_ptr, t->rows, t->cols, t->tile_mask, 1, t->exec_hints);
+            } else {
+                internal_exec_gemv(t->weight_ptr, t->input_ptr, t->output_ptr, t->rows, t->cols, t->tile_mask, t->exec_hints);
+            }
+
+            // Simulate overlapping memory + compute in batch (Pipelining)
+            if (batch_size > 1) {
+                g_last_metrics.cycles = (long)(g_last_metrics.cycles * 0.85);
+            }
+
+            // Unpin blocks
+            pthread_mutex_lock(&g_fabric_mutex);
+            set_busy(t->weight_ptr, -1);
+            set_busy(t->input_ptr, -1);
+            set_busy(t->output_ptr, -1);
+            pthread_mutex_unlock(&g_fabric_mutex);
+
+            // Telemetry
+            if (b == batch_size - 1) { // Only log once per batch for brevity
+                int active_tiles_telemetry = 0;
+                for (int i = 0; i < 8; i++) if (t->tile_mask & (1 << i)) active_tiles_telemetry++;
+                if (active_tiles_telemetry == 0) active_tiles_telemetry = 1;
+
+                fprintf(stderr, "\n[TFMBS-Telemetry] Batch of %d %s(s) Completed\n",
+                        batch_size, t->kernel == KERNEL_LSTM ? "LSTM" : (t->kernel == KERNEL_LSTM_PERSISTENT ? "LSTM-Persistent" : "GEMV"));
+                fprintf(stderr, "  - Last Active Tiles: %d (mask 0x%02x)\n", active_tiles_telemetry, t->tile_mask);
+                fprintf(stderr, "  - Zero-Skips: %ld (%.1f%% reduction)\n", g_last_metrics.zero_skips, g_last_metrics.sim_cycle_reduction);
+                fprintf(stderr, "  - Cycles:     %ld (Cost: %.1f, Efficiency: %.2f)\n", g_last_metrics.cycles, g_last_metrics.fabric_cost, g_last_metrics.semantic_efficiency);
+                fprintf(stderr, "  - Residency:  Hits: %lu, Misses: %lu\n", g_last_metrics.residency_hits, g_last_metrics.residency_misses);
+                fprintf(stderr, "  - Pool Usage: %zu / %zu bytes (%.1f%%)\n", g_last_metrics.pool_used, g_last_metrics.pool_total, (double)g_last_metrics.pool_used / g_last_metrics.pool_total * 100.0);
+                fprintf(stderr, "  - Evictions:  %d\n", g_last_metrics.eviction_count);
+            }
+
+            pthread_mutex_lock(&t->mutex);
+            t->status = TASK_DONE;
+            pthread_cond_broadcast(&t->cond);
+            pthread_mutex_unlock(&t->mutex);
         }
-
-        // Unpin blocks
-        pthread_mutex_lock(&g_fabric_mutex);
-        set_busy(task->weight_ptr, -1);
-        set_busy(task->input_ptr, -1);
-        set_busy(task->output_ptr, -1);
-        pthread_mutex_unlock(&g_fabric_mutex);
-
-        // Telemetry (Phase 9/11)
-        int active_tiles_telemetry = 0;
-        for (int i = 0; i < 8; i++) if (task->tile_mask & (1 << i)) active_tiles_telemetry++;
-        if (active_tiles_telemetry == 0) active_tiles_telemetry = 1;
-
-        fprintf(stderr, "\n[TFMBS-Telemetry] %s Completed\n",
-                task->kernel == KERNEL_LSTM ? "LSTM" : (task->kernel == KERNEL_LSTM_PERSISTENT ? "LSTM-Persistent" : "GEMV"));
-        fprintf(stderr, "  - Active Tiles: %d (mask 0x%02x)\n", active_tiles_telemetry, task->tile_mask);
-        fprintf(stderr, "  - Zero-Skips: %ld (%.1f%% reduction)\n", g_last_metrics.zero_skips, g_last_metrics.sim_cycle_reduction);
-        fprintf(stderr, "  - Cycles:     %ld (Cost: %.1f, Efficiency: %.2f)\n", g_last_metrics.cycles, g_last_metrics.fabric_cost, g_last_metrics.semantic_efficiency);
-        fprintf(stderr, "  - Residency:  Hits: %lu, Misses: %lu\n", g_last_metrics.residency_hits, g_last_metrics.residency_misses);
-        fprintf(stderr, "  - Pool Usage: %zu / %zu bytes (%.1f%%)\n", g_last_metrics.pool_used, g_last_metrics.pool_total, (double)g_last_metrics.pool_used / g_last_metrics.pool_total * 100.0);
-        fprintf(stderr, "  - Evictions:  %d\n", g_last_metrics.eviction_count);
-
-        pthread_mutex_lock(&task->mutex);
-        task->status = TASK_DONE;
-        pthread_cond_broadcast(&task->cond);
-        pthread_mutex_unlock(&task->mutex);
     }
     return NULL;
 }

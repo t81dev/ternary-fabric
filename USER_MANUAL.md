@@ -30,7 +30,11 @@ Welcome to the **Ternary Fabric** user manual. This documentation is designed to
     Details on multi-tile topology and masking.
 13. **[PyTorch Integration](docs/12_PYTORCH.md)**
     Using the Ternary Fabric within the PyTorch deep learning framework.
-14. **[Strategy Roadmap](docs/ROADMAP.md)**
+14. **[GGUF Model Optimizations](docs/14_GGUF.md)**
+    Optimizing llama.cpp and GGUF workflows.
+15. **[Data-Driven Adaptation](docs/19_DATA_DRIVEN_ADAPTATION.md)**
+    Details on Phase 19 cost-aware scheduling and adaptive residency.
+16. **[Strategy Roadmap](docs/ROADMAP.md)**
     The project roadmap detailing completed and future phases.
 
 ---

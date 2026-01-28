@@ -78,6 +78,7 @@ typedef struct {
 #define TFMBS_HINT_ZERO_SKIP_EN    (1 << 17)
 #define TFMBS_HINT_FREE_NEG_EN     (1 << 18)
 #define TFMBS_HINT_WEIGHT_BRDCST   (1 << 19)
+#define TFMBS_HINT_FUSED           (1 << 20)
 
 /* T-CONV Specific Hints */
 #define TFMBS_HINT_STRIDE_MASK     0x00300000 // Bits 21:20
