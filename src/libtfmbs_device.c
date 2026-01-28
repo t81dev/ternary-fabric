@@ -83,6 +83,20 @@ int fabric_exec_gemv(void* weight_ptr, void* input_ptr, void* output_ptr, int ro
     return emu_fabric_exec_gemv(weight_ptr, input_ptr, output_ptr, rows, cols, tile_mask);
 }
 
+int fabric_exec_lstm(void* weight_ptr, void* input_ptr, void* output_ptr, int h_size, int i_size) {
+    init_device();
+    uint8_t tile_mask = 0x0F;
+    const char* mask_env = getenv("FABRIC_TILE_MASK");
+    if (mask_env) tile_mask = (uint8_t)strtol(mask_env, NULL, 0);
+
+    if (g_tfmbs_fd >= 0) {
+        fabric_handle_t h = fabric_exec_lstm_async(weight_ptr, input_ptr, output_ptr, h_size, i_size);
+        fabric_wait(h);
+        return 0;
+    }
+    return emu_fabric_exec_lstm(weight_ptr, input_ptr, output_ptr, h_size, i_size, tile_mask);
+}
+
 fabric_handle_t fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols) {
     init_device();
     uint8_t tile_mask = 0x0F; // Default to 4 tiles
@@ -103,6 +117,29 @@ fabric_handle_t fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, void* 
         return NULL;
     }
     return emu_fabric_exec_gemv_async(weight_ptr, input_ptr, output_ptr, rows, cols, tile_mask);
+}
+
+fabric_handle_t fabric_exec_lstm_async(void* weight_ptr, void* input_ptr, void* output_ptr, int h_size, int i_size) {
+    init_device();
+    uint8_t tile_mask = 0x0F;
+    const char* mask_env = getenv("FABRIC_TILE_MASK");
+    if (mask_env) tile_mask = (uint8_t)strtol(mask_env, NULL, 0);
+
+    if (g_tfmbs_fd >= 0) {
+        // Mock driver support for LSTM (using generic submit)
+        tfmbs_ioc_submit_gemv_t args = {
+            .weight_addr = (uint64_t)weight_ptr,
+            .input_addr = (uint64_t)input_ptr,
+            .output_addr = (uint64_t)output_ptr,
+            .rows = h_size * 4, .cols = i_size + h_size, // LSTM encoded as GEMV in mock driver
+            .tile_mask = tile_mask
+        };
+        if (tfmbs_dev_ioctl(g_tfmbs_fd, TFMBS_IOC_SUBMIT_GEMV, &args) == 0) {
+            return (fabric_handle_t)args.handle;
+        }
+        return NULL;
+    }
+    return emu_fabric_exec_lstm_async(weight_ptr, input_ptr, output_ptr, h_size, i_size, tile_mask);
 }
 
 int fabric_wait(fabric_handle_t handle) {

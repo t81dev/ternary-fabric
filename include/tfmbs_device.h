@@ -17,6 +17,11 @@ typedef struct {
     size_t pool_used;
     size_t pool_total;
     int eviction_count;
+    // Phase 18 Metrics
+    long cycles;
+    double fabric_cost;
+    long mem_reads;
+    long mem_writes;
 } fabric_metrics_t;
 
 typedef void* fabric_handle_t;
@@ -26,12 +31,14 @@ void fabric_free(void* ptr);
 int fabric_memcpy_to(void* dest_fabric, const void* src_host, size_t size, int pack_pt5);
 int fabric_memcpy_from(void* dest_host, const void* src_fabric, size_t size, int unpack_pt5);
 int fabric_exec_gemv(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols);
+int fabric_exec_lstm(void* weight_ptr, void* input_ptr, void* output_ptr, int hidden_size, int input_size);
 
 // Cooperative API (Phase 16)
 void fabric_register_weight(void* ptr, size_t size);
 
 // Async API (Phase 8)
 fabric_handle_t fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols);
+fabric_handle_t fabric_exec_lstm_async(void* weight_ptr, void* input_ptr, void* output_ptr, int hidden_size, int input_size);
 int fabric_wait(fabric_handle_t handle);
 
 // Low-level TFD submission (Phase 10)

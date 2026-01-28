@@ -51,7 +51,7 @@ directories:
 	mkdir -p $(BIN_DIR)
 
 # --- Shared Libraries ---
-$(BIN_DIR)/libtfmbs_device$(SHLIB_EXT): $(SRC_DIR)/libtfmbs_device.c $(SRC_DIR)/fabric_emulator.c $(SRC_DIR)/tfmbs_driver_mock.c
+$(BIN_DIR)/libtfmbs_device$(SHLIB_EXT): $(SRC_DIR)/libtfmbs_device.c $(SRC_DIR)/fabric_emulator.c $(SRC_DIR)/tfmbs_driver_mock.c $(SRC_DIR)/libtfmbs_api.c
 	$(CC) $(CFLAGS) -fPIC $(LDFLAGS_SHARED) -o $@ $^
 
 $(BIN_DIR)/libtfmbs_intercept$(SHLIB_EXT): $(SRC_DIR)/libtfmbs_intercept.c $(BIN_DIR)/libtfmbs_device$(SHLIB_EXT)
