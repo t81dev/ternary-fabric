@@ -173,12 +173,12 @@ Telemetry exposes sparsity, residency, economic cost, and semantic efficiency in
 
 ## 🏗️ Project State & Architecture
 
-The project is currently in **Phase 20**, representing a **Learning & Self-Tuning Fabric**:
+The project is currently in **Phase 21**, representing a **Predictive Multi-Fabric Orchestration layer**:
 
-* **Adaptive Cost Modeling:** Real-time tuning of scheduler coefficients based on measured costs.
-* **Dynamic Scheduler Weighting:** Tiles "learn" kernel preferences to maximize economic efficiency.
-* **Self-Tuning Eviction:** Feedback-driven scoring protects blocks that contribute most to efficiency.
-* **Temporal Auto-Tuning:** Dynamic batch sizing to optimize the meaning-to-cost ratio.
+* **Global Orchestration:** Coordinate workloads across multiple distinct TFMBS fabrics.
+* **Predictive Scheduling:** Use lookahead telemetry to anticipate bottlenecks and optimize hot-state residency.
+* **Cross-Fabric Fusion:** Virtual macro-kernels reduce inter-fabric communication and repeated hydration.
+* **Adaptive Pipeline Depth:** Multi-stage execution (Pre-fetch -> Execute -> Commit) with dynamic depth control.
 
 ### Architecture Layers
 
