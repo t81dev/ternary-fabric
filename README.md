@@ -6,6 +6,8 @@
 
 **Ternary Fabric** is a ternary-native memory and interconnect co-processor designed to accelerate AI and signal processing. By utilizing balanced-ternary semantics ({-1, 0, 1}), it eliminates multiplication overhead and enables fine-grained hardware optimizations like **Zero-Skip** and **Free-Negation**.
 
+Ternary Fabric transparently intercepts AI workloads and executes sparse linear algebra using ternary hardware semantics to reduce power, memory traffic, and multiplication cost without rewriting models.
+
 ---
 
 ## ⚡ Quick Start & Prerequisites
