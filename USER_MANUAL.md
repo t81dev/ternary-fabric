@@ -36,7 +36,9 @@ Welcome to the **Ternary Fabric** user manual. This documentation is designed to
     Details on Phase 19 cost-aware scheduling and adaptive residency.
 16. **[Learning & Self-Tuning](docs/20_LEARNING_AND_SELF_TUNING.md)**
     Phase 20 documentation on adaptive cost modeling and scheduler weighting.
-17. **[Strategy Roadmap](docs/ROADMAP.md)**
+17. **[Predictive Multi-Fabric Orchestration](docs/21_MULTI_FABRIC_ORCHESTRATION.md)**
+    Phase 21 documentation on global orchestration and predictive scheduling.
+18. **[Strategy Roadmap](docs/ROADMAP.md)**
     The project roadmap detailing completed and future phases.
 
 ---
@@ -84,19 +86,28 @@ When running with the interposer or Python API, the Fabric provides real-time te
 
 ## 🤖 Adaptive Learning (Phase 20)
 
-Starting with Phase 20, the Ternary Fabric is a self-tuning co-processor. It automatically optimizes its own internal parameters based on measured performance:
+Starting with Phase 20, the Ternary Fabric is a self-tuning co-processor. It automatically optimizes its own internal parameters based on measured performance.
 
-### Self-Tuning Cost Model
-The scheduler uses a **Hill-Climbing** algorithm to adjust its cost projection coefficients. If the actual `fabric_cost` differs from the `projected_cost`, the fabric updates its internal model to ensure more accurate tile selection in the future.
+## 🌐 Multi-Fabric Orchestration (Phase 21)
 
-### Dynamic Scheduler Weighting
-Tiles "learn" which kernels they are most efficient at executing. A tile that consistently delivers higher **Economic Efficiency** for a specific kernel (e.g., LSTM) will be favored for that kernel in future scheduling decisions.
+Phase 21 elevates the TFMBS from a single adaptive co-processor to a **multi-fabric orchestration layer**. It provides proactive, system-level efficiency management:
 
-### Eviction Policy Optimization
-The eviction policy is no longer fixed LRU. It now dynamically weights **Frequency**, **Recency (Age)**, and **Residency Success Rate**. This ensures that weights critical to maintaining high efficiency are protected from eviction.
+### Global Orchestration
+Workloads are dynamically distributed across multiple isolated fabric instances. The system tracks buffer residency across all fabrics and automatically manages inter-fabric data movement (transfers) to minimize latency.
 
-### Temporal Auto-Tuning
-The asynchronous command queue automatically adjusts its **Batch Size** (between 1 and 32) to maximize a composite score of efficiency and throughput. It occasionally "explores" different batch sizes to find the optimal throughput for the current sparsity regime.
+### Predictive Scheduling (Lookahead)
+The orchestrator uses a **lookahead window of 5 kernels** to anticipate future task requirements. It selects the optimal fabric for the current task by considering where the weights will be needed next, effectively implementing **hot-state anticipation**.
+
+### Cross-Fabric Fusion
+The scheduler identifies dependent task sequences (e.g., GEMV output feeding an LSTM gate update) and prioritizes keeping them on the same fabric. This virtual "macro-kernel" approach reduces repeated hydration and inter-fabric communication.
+
+### Adaptive Multi-Stage Pipeline
+Each fabric manages a three-stage asynchronous pipeline:
+1.  **Pre-fetch:** Handles buffer hydration, PT-5 packing, and inter-fabric transfers.
+2.  **Execute:** Performs the native ternary kernel computation.
+3.  **Commit:** Finalizes results and signals task completion.
+
+The pipeline depth automatically adjusts based on workload density—extending for throughput on dense kernels and shortening for low latency on sparse workloads.
 
 ---
 
