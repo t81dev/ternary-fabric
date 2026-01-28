@@ -1,56 +1,34 @@
 # Phase 19: Data-Driven Adaptation (Cost-Aware Fabric)
 
-Phase 19 focuses on transforming the Fabric from a passive executor into an active, economically-driven co-processor. It leverages the telemetry established in Phase 18 to make autonomous decisions about scheduling, residency, and optimization.
+Phase 19 leverages the metrics established in Phase 18 to drive autonomous fabric behavior and scheduling, ensuring optimal performance across varying workloads.
 
-## 1. Cost-Aware Scheduler
+## 🎯 Objectives
 
-The scheduler now selects tiles based on **projected cost** rather than fixed or round-robin assignment.
+1.  **Economic Introspection:** Expose internal decision metrics for system-level optimization.
+2.  **Hysteresis Scheduling:** Stabilize tile selection and residency management.
+3.  **Sparse-Regime Hardening:** Ensure robustness and efficiency in 95-99% sparse regimes.
 
-### projected_cost(tile, kernel, tensors)
-- **Residency Hits (Rebates):** Prefers tiles where weights or inputs are already resident (providing negative cost).
-- **Hysteresis:** A small sticky-tile boost (0.5 cost reduction) is applied if the tile is already assigned to the weight block to prevent economic jitter.
-- **Broadcast Reuse:** Accounts for the cost of moving data between tiles.
-- **Historical Efficiency:** Factor in the `semantic_efficiency` recorded for that tile.
+## 💎 Economic Introspection
 
-## 2. Economic Introspection
+The fabric now logs its internal decision matrix to `economic_metrics.csv`. This provides transparency into why specific scheduling decisions were made.
 
-Phase 19 hardened implementation exposes the underlying decision logic via `economic_metrics.csv`.
+- **Projected Cost:** The estimated **Fabric Cost** for a task before execution.
+- **Rebates:** Reductions in cost due to **Residency Hits** or **Zero-Skip** potential.
+- **Eviction Scores:** Metric-driven priorities for buffer replacement in the residency pool.
 
-### Tracked Fields
-- `projected_cost`: The estimated cost for the best-performing tile.
-- `residency_rebate`: The negative cost applied due to data locality.
-- `chosen_tile_id`: The primary tile selected by the scheduler.
-- `eviction_scores`: A list of policy scores for blocks evicted during kernel allocation.
+## ⚖️ Hysteresis Scheduling
 
-## 3. Residency Policy Engine
+To prevent "tile oscillation" (frequent switching of buffers between tiles), the scheduler implements hysteresis:
+- **Sticky-Tile Affinity:** A 0.5 cost "rebate" is applied to tiles already holding the required weights.
+- **Cost Smoothing:** Uses an Exponential Moving Average (EMA) to filter noise in measured **Economic Efficiency**.
 
-Adaptive memory management replaces static LRU.
+## 🌵 Sparse-Regime Hardening
 
-### Scoring Heuristic
-Blocks are scored based on:
-- **Recency:** Time since last access.
-- **Frequency:** Total number of accesses.
-- **Semantic Efficiency:** How much "meaning" (active ops) the block contributes per cost unit.
+The **Zero-Skip** logic is stress-tested in extreme sparsity regimes (95%+).
+- **Control Logic Robustness:** Ensuring the frame controller correctly handles cases where entire rows or tiles are skipped.
+- **Throughput Scaling:** Verifying that effective GOPS scale linearly with sparsity as compute cycles are reclaimed.
 
-### Policies
-- `keep_hot_state`: Prevents eviction of frequently used activation/state buffers.
-- `evict_cold_weights`: Prioritizes eviction of weights with long reuse distances.
-- `adaptive_pinning`: Automatically pins blocks that show high temporal locality.
+## 📈 KPI Maturation
 
-## 3. Sparse-Regime Optimization
-
-Reduces overhead for workloads where Zero-Skip is highly active.
-
-- **Micro-kernel Fusion:** Fuses adjacent operations (e.g., GEMV + Bias + Activation) to reduce memory round-trips.
-- **Control Flow Collapse:** Batches small asynchronous tasks to minimize worker thread wake-up overhead.
-
-## 4. Temporal Pipelines
-
-Optimizes recurrent and agentic workloads (LSTM, RNN).
-
-- **Asynchronous Hydration:** Prefetches the next step's inputs/weights while the current step is computing.
-- **State Persistence:** Keeps hidden states local to tiles to minimize fabric-wide broadcasts.
-
-## 5. Metric-Driven Auto-Tuning
-
-Rolling averages and baseline comparisons allow the fabric to "learn" the optimal configuration for a given workload over time.
+- **Semantic Efficiency:** Quantifies the "work done" per operation by accounting for **Zero-Skip** savings.
+- **Economic Efficiency:** Quantifies the "value delivered" per unit of **Fabric Cost**, serving as the primary optimization target for the Phase 20 self-tuning loops.
