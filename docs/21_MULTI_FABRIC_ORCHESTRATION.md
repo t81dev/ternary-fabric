@@ -1,53 +1,48 @@
 # Phase 21: Predictive Multi-Fabric Orchestration
 
-This document details the architecture and implementation of the Phase 21 orchestration layer for the Ternary Fabric.
+Phase 21 elevates the Ternary Fabric to a system-level orchestrated platform, managing workload distribution across multiple independent **Fabric Instances**.
 
-## 1. Overview
-Phase 21 transitions the TFMBS from a single-device accelerator to a system-level orchestrated platform. It introduces a central Global Orchestrator that manages workload distribution across multiple Fabric instances.
+## 🎯 Objectives
 
-## 2. Global Orchestrator
-The Orchestrator resides in `src/libtfmbs_device.c` and manages a staging queue for all incoming tasks. It runs in a dedicated background thread.
+1.  **Global Orchestration:** Coordinate tasks across multiple isolated co-processors.
+2.  **Predictive Scheduling:** Use lookahead telemetry to anticipate bottlenecks and optimize **Residency Hits**.
+3.  **Cross-Fabric Fusion:** Reduce inter-fabric communication via virtual macro-kernels.
+4.  **Adaptive Pipeline Depth:** Multi-stage execution (Pre-fetch -> Execute -> Commit) with dynamic depth control.
 
-### Residency Tracking
-The system maintains a global residency map (`g_residency_map`) that tracks which fabric instance currently holds a valid PT-5 representation of each memory buffer.
+## 🌐 Global Orchestrator
+
+The **Global Orchestrator** manages a staging queue for all incoming **TFD** tasks. It tracks the state of the entire system via a global residency map.
 
 ### Dispatch Heuristics
-1. **Locality First:** If a buffer required by a task is already resident on a specific fabric, that fabric is prioritized.
-2. **Load Balancing:** If residency is not established, tasks are distributed using a round-robin or least-loaded strategy.
-3. **Automated Transfer:** If the orchestrator decides to move a task to a different fabric than where its data resides, it automatically inserts `KERNEL_TRANSFER` operations into the pipeline.
+1. **Locality First:** Prioritize the **Fabric Instance** that already holds the required **PT-5** weight blocks.
+2. **Automated Transfer:** If data must be moved, the orchestrator automatically schedules inter-fabric copies via `KERNEL_TRANSFER`.
+3. **Load Balancing:** Distribute tasks to maintain high utilization across all available co-processors.
 
-## 3. Predictive Scheduling (Lookahead)
+## 🔮 Predictive Scheduling (Lookahead)
+
 The orchestrator maintains a **Lookahead Window of 5 kernels**. By inspecting future tasks, the scheduler can:
-- **Anticipate Hot-State:** Pre-load weights onto a fabric that will be used by multiple upcoming tasks.
-- **Minimize Transfers:** Avoid moving a buffer if a future task on the same fabric will need it.
+- **Anticipate Hot-State:** Pre-load weights onto an instance that will be used by multiple upcoming tasks.
+- **Minimize Transfers:** Avoid moving a buffer if a future task on the same instance will need it, forming a "virtual macro-kernel."
 
-## 4. Cross-Fabric Kernel Fusion
-The scheduler detects dependencies between kernels (e.g., Task B uses the output of Task A). It prioritizes keeping these tasks on the same fabric to form a "virtual macro-kernel," eliminating the need for expensive inter-fabric memory movement.
+## ⚙️ Multi-Stage Pipeline
 
-## 5. Multi-Stage Pipeline
-Each Fabric instance operates a three-stage pipeline:
+Each **Fabric Instance** operates a three-stage asynchronous pipeline:
 
 | Stage | Action |
 | :--- | :--- |
-| **Pre-fetch** | Hydrates RAW buffers, packs them into PT-5, or performs inter-fabric copies. |
-| **Execute** | Runs the native kernel (GEMV, LSTM, etc.) on the ternary tiles. |
+| **Pre-fetch** | Hydrates RAW buffers, packs them into **PT-5**, or performs inter-fabric copies. |
+| **Execute** | Runs the native kernel (**T-GEMM**, **T-LSTM**, etc.) on the **Ternary Lanes**. |
 | **Commit** | Finalizes the result buffer and signals the host handle. |
 
 ### Adaptive Pipeline Depth
-The pipeline depth (`pipeline_depth`) dynamically scales:
-- **Depth=3 (Full):** For high-density, compute-heavy workloads to maximize throughput.
-- **Depth=1 (Short):** For sparse or low-latency workloads to minimize completion time.
+The pipeline depth dynamically scales based on measured **Semantic Efficiency**:
+- **Full Pipeline (Depth=3):** For high-density, compute-heavy workloads to maximize throughput.
+- **Short Pipeline (Depth=1):** For sparse or low-latency workloads to minimize completion time.
 
-## 6. Telemetry & Metrics
-`economic_metrics.csv` has been extended to include:
-- `fid`: The Fabric ID.
-- `projected_cost`: The predicted cost used for scheduling.
-- `efficiency`: The measured economic efficiency for that instance.
+## 📊 Metrics & Configuration
 
-## 7. Configuration
-The number of fabrics can be configured at runtime:
+The number of fabrics is configurable via the environment:
 ```bash
 export TFMBS_NUM_FABRICS=4
-LD_PRELOAD=./bin/libtfmbs_intercept.so ./my_app
 ```
-(Default is 2 fabrics).
+Metrics for each instance (fid, projected\_cost, efficiency) are logged to `economic_metrics.csv` for system-level introspection.
