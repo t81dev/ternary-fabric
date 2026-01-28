@@ -35,8 +35,26 @@ int main() {
     printf("P1: %p, P3: %p\n", p1, p3);
     assert(p3 == p1); // Should reuse p1's slot after eviction and coalescing
 
-    // Verify P2 is still "resident" (in the sense that we haven't reused its memory yet)
-    // Actually, fabric_alloc doesn't tell us if it's resident, but metrics do.
+    // --- Regression Test: All memory busy ---
+    printf("Testing Busy Block OOM...\n");
+
+    // Total pool is 128MB. We have p2 (50MB) and p3 (50MB) active.
+    // Total 100MB used.
+
+    // Now trigger an async task to pin p2 and p3
+    // We need dummy pointers for weight/input/output
+    void* p_out = fabric_alloc(1024); // Small output
+    fabric_handle_t h = fabric_exec_gemv_async(p2, p3, p_out, 1, 1);
+
+    // At this point p2, p3, p_out are BUSY.
+    // Remaining space is ~28MB.
+
+    // Try to allocate 50MB. It should FAIL because it can't evict p2 or p3.
+    void* p4 = fabric_alloc(50 * 1024 * 1024);
+    assert(p4 == NULL);
+    printf("Successfully caught OOM when blocks are busy.\n");
+
+    fabric_wait(h);
 
     printf("Eviction Test Passed!\n");
     return 0;

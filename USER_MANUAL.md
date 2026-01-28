@@ -40,17 +40,27 @@ Welcome to the **Ternary Fabric** user manual. This documentation is designed to
 The Ternary Fabric can accelerate applications like `llama.cpp` without source code modifications using the `libtfmbs_intercept.so` interposer.
 
 ### Usage
+The easiest way to run an application with Fabric acceleration is using the `tfmbs-run` tool:
 ```bash
-# Enable Fabric acceleration with CPU short-circuiting
-export FABRIC_SHORT_CIRCUIT=1
-LD_PRELOAD=./libtfmbs_intercept.so ./my_app
+./tools/tfmbs-run ./my_app
 ```
 
 ### Environment Variables
 *   `FABRIC_SHORT_CIRCUIT=1`: Enables the interposer to bypass CPU compute loops once weights are resident in the Fabric.
-*   `TFMBS_DEBUG=1`: Enables verbose logging of memory allocations and offloading events.
+*   `TFMBS_DEBUG=1`: Enables detailed real-time logging of memory registry changes, GEMV offloads, and async waits.
+*   `TFMBS_VALIDATE=1`: Bit-exact comparison of Fabric results against a CPU reference for every operation.
+
+### Cooperative Mode (Explicit Registration)
+If you want to avoid the overhead of the "First Scan" heuristic, you can explicitly register weight buffers by calling `fabric_register_weight(ptr, size)` from your application.
 
 ---
+
+## ⚠️ Best Practices & Limitations
+
+### When NOT to use Fabric
+- **Small Matrices:** GEMV operations smaller than 1024 elements may incur more overhead than they save.
+- **High-Precision Requirements:** Fabric is optimized for ternary weights. High-precision (FP32/BF16) weights will be quantized/compressed, which may impact accuracy.
+- **Frequent Writes:** If you frequently write to weight buffers, the interposer will constantly need to re-pack them into PT-5 format.
 
 ## 📊 Interpreting Telemetry
 

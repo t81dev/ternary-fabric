@@ -10,7 +10,7 @@ int emu_fabric_memcpy_to(void* dest_fabric, const void* src_host, size_t size, i
 int emu_fabric_memcpy_from(void* dest_host, const void* src_fabric, size_t size, int unpack_pt5);
 int emu_fabric_exec_gemv(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols, uint8_t tile_mask);
 fabric_handle_t emu_fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols, uint8_t tile_mask);
-void emu_fabric_wait(fabric_handle_t handle);
+int emu_fabric_wait(fabric_handle_t handle);
 void emu_fabric_get_metrics(fabric_metrics_t* out_metrics);
 int emu_is_fabric_ptr(const void* ptr);
 
