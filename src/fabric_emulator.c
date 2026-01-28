@@ -541,8 +541,17 @@ static int internal_exec_gemv(fabric_instance_t* inst, void* w_ptr, void* i_ptr,
         int8_t ts[5]; unpack_byte_to_trits(ip[i], ts);
         for (int j=0; j<5; j++) if (i*5+j < cols) g_i_trits[i*5+j] = ts[j];
     }
+    int active_tiles = 0;
+    for (int i = 0; i < 8; i++) if (tile_mask & (1 << i)) active_tiles++;
+    if (active_tiles == 0) active_tiles = 1;
+
     inst->last_metrics.total_ops = (long)rows * cols;
     inst->last_metrics.zero_skips = 0;
+    inst->last_metrics.lanes_used = active_tiles * 15;
+    inst->last_metrics.mem_reads = (rows * cols) / 5 + cols / 5;
+    inst->last_metrics.mem_writes = rows * 4;
+    inst->last_metrics.cycles = (rows * cols) / inst->last_metrics.lanes_used;
+
     int32_t* res = (int32_t*)do_;
     for (int r=0; r<rows; r++) {
         int32_t acc=0;
@@ -724,7 +733,14 @@ static void* fabric_worker_loop(void* arg) {
     return NULL;
 }
 
-void emu_fabric_get_metrics(fabric_metrics_t* m) { emu_fabric_init(); if (m) *m = g_fabrics[0].last_metrics; }
+void emu_fabric_get_metrics_id(int fid, fabric_metrics_t* m) {
+    emu_fabric_init();
+    fabric_instance_t* inst = get_inst(fid);
+    pthread_mutex_lock(&inst->mutex);
+    if (m) *m = inst->last_metrics;
+    pthread_mutex_unlock(&inst->mutex);
+}
+void emu_fabric_get_metrics(fabric_metrics_t* m) { emu_fabric_get_metrics_id(0, m); }
 void emu_fabric_dump_metrics_csv(const char* p) { emu_fabric_dump_economic_csv(p); }
 void emu_fabric_lstm_bind(void* w, void* s, uint8_t tm) { (void)w;(void)s;(void)tm; }
 fabric_handle_t emu_fabric_exec_lstm_async_id(int fid, void* w, void* i, void* o, int h, int is, uint8_t tm) {

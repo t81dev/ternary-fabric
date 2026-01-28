@@ -42,21 +42,15 @@ Fabric Instance (Emulator / Hardware)
 - Automatic migration and packing (RAW → PT-5) of resident weights.
 - Deliverable: Residency pool management in `libtfmbs_device.so`.
 
-### Phase 5: Execution Injection ✅
-- Transparent offloading of GEMV compute loops to Fabric kernels.
-- Deliverable: **CPU Short-Circuiting** logic.
+### Phase 21 — Predictive Multi-Fabric Orchestration ✅
+Elevating the fabric to a proactive, system-level efficiency management layer.
+*   **Deliverables:**
+    *   **Global Orchestrator:** Dynamic task distribution across multiple isolated fabric instances.
+    *   **Predictive Scheduler:** Lookahead mechanism (Window=5) for hot-state anticipation and pre-loading.
+    *   **Cross-Fabric Fusion:** Automated locality optimization for dependent kernel sequences.
+    *   **Adaptive Multi-Stage Pipeline:** Three-stage asynchronous execution (Pre-fetch -> Execute -> Commit) with dynamic depth.
 
-### Phase 6: Zero-Skip Hardware ✅
-- Activation of lane-level gating to exploit ternary sparsity.
-- Deliverable: Gated logic in `src/fabric_emulator.c`.
-
-### Phase 7: Paging & Eviction ✅
-- LRU-based block allocation for models exceeding Fabric memory.
-- Deliverable: Page-aligned block allocator with pinning support.
-
-### Phase 8: Asynchronous Pipelining ✅
-- Decoupling of host processing from Fabric execution via command queues.
-- Deliverable: Worker thread and background GEMV submission.
+---
 
 ### Phase 9: Integrated Telemetry ✅
 - Real-time visibility into sparsity, residency, and cycle counts.

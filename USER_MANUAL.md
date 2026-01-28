@@ -86,22 +86,28 @@ When running with the interposer or Python API, the Fabric provides real-time te
 
 ## 🌐 Predictive Multi-Fabric Orchestration (Phase 21)
 
-Phase 21 introduces a proactive, system-level efficiency management layer:
+Starting with Phase 20, the Ternary Fabric is a self-tuning co-processor. It automatically optimizes its own internal parameters based on measured performance.
+
+## 🌐 Multi-Fabric Orchestration (Phase 21)
+
+Phase 21 elevates the TFMBS from a single adaptive co-processor to a **multi-fabric orchestration layer**. It provides proactive, system-level efficiency management:
 
 ### Global Orchestration
-Workloads are dynamically distributed across multiple independent **Fabric Instances**. The **Global Orchestrator** tracks buffer residency and automatically manages inter-fabric data movement (transfers).
+Workloads are dynamically distributed across multiple isolated fabric instances. The system tracks buffer residency across all fabrics and automatically manages inter-fabric data movement (transfers) to minimize latency.
 
 ### Predictive Scheduling (Lookahead)
 The orchestrator uses a **lookahead window of 5 kernels** to anticipate future task requirements. It selects the optimal fabric for the current task by considering where the weights will be needed next, effectively implementing **hot-state anticipation**.
 
 ### Cross-Fabric Fusion
-The scheduler identifies dependent task sequences and prioritizes keeping them on the same fabric. This virtual "macro-kernel" approach reduces repeated hydration and inter-fabric communication.
+The scheduler identifies dependent task sequences (e.g., GEMV output feeding an LSTM gate update) and prioritizes keeping them on the same fabric. This virtual "macro-kernel" approach reduces repeated hydration and inter-fabric communication.
 
 ### Adaptive Multi-Stage Pipeline
-Each fabric instance manages a three-stage asynchronous pipeline:
-1.  **Pre-fetch:** Handles buffer hydration, **PT-5** packing, and inter-fabric transfers.
-2.  **Execute:** Performs the native ternary kernel computation on the **Ternary Lanes**.
+Each fabric manages a three-stage asynchronous pipeline:
+1.  **Pre-fetch:** Handles buffer hydration, PT-5 packing, and inter-fabric transfers.
+2.  **Execute:** Performs the native ternary kernel computation.
 3.  **Commit:** Finalizes results and signals task completion.
+
+The pipeline depth automatically adjusts based on workload density—extending for throughput on dense kernels and shortening for low latency on sparse workloads.
 
 ---
 

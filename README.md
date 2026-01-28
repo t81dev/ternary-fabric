@@ -37,7 +37,16 @@ Ternary Fabric operates as a **semantic execution substrate**, not a library rew
 
 ---
 
-## 🚀 Current State: Phase 21
+## 🏗️ Project State & Architecture
+
+The project is currently in **Phase 21**, representing a **Predictive Multi-Fabric Orchestration layer**:
+
+* **Global Orchestration:** Coordinate workloads across multiple distinct TFMBS fabrics.
+* **Predictive Scheduling:** Use lookahead telemetry to anticipate bottlenecks and optimize hot-state residency.
+* **Cross-Fabric Fusion:** Virtual macro-kernels reduce inter-fabric communication and repeated hydration.
+* **Adaptive Pipeline Depth:** Multi-stage execution (Pre-fetch -> Execute -> Commit) with dynamic depth control.
+
+### Architecture Layers
 
 The project has completed **Phase 21 (Predictive Multi-Fabric Orchestration)**. Key deliverables include:
 

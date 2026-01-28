@@ -18,6 +18,7 @@ fabric_handle_t emu_fabric_exec_lstm_async(void* weight_ptr, void* input_ptr, vo
 fabric_handle_t emu_fabric_exec_lstm_async_id(int fabric_id, void* weight_ptr, void* input_ptr, void* output_ptr, int hidden_size, int input_size, uint8_t tile_mask);
 int emu_fabric_wait(fabric_handle_t handle);
 void emu_fabric_get_metrics(fabric_metrics_t* out_metrics);
+void emu_fabric_get_metrics_id(int fabric_id, fabric_metrics_t* out_metrics);
 int emu_is_fabric_ptr(const void* ptr);
 
 void emu_fabric_lstm_bind(void* weight_ptr, void* state_ptr, uint8_t tile_mask);

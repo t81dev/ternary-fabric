@@ -34,6 +34,7 @@ static pthread_t g_orch_thread;
 static int g_orch_running = 0;
 
 static int g_num_fabrics = 2;
+static int g_last_dispatched_fid = 0;
 
 #define MAX_BUFFERS 2048
 static struct {
@@ -178,9 +179,13 @@ fabric_handle_t fabric_exec_gemv_async_id(int fabric_id, void* weight_ptr, void*
 
 fabric_handle_t fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols) {
     init_device();
+    uint8_t tile_mask = 0x0F;
+    const char* mask_env = getenv("FABRIC_TILE_MASK");
+    if (mask_env) tile_mask = (uint8_t)strtol(mask_env, NULL, 0);
+
     orch_task_t* task = malloc(sizeof(orch_task_t));
     task->type = OK_GEMV; task->w = weight_ptr; task->i = input_ptr; task->o = output_ptr;
-    task->r = rows; task->c = cols; task->tile_mask = 0x0F;
+    task->r = rows; task->c = cols; task->tile_mask = tile_mask;
     task->dispatched = 0; task->emu_handle = NULL;
     pthread_mutex_init(&task->mutex, NULL); pthread_cond_init(&task->cond, NULL); task->next = NULL;
     pthread_mutex_lock(&g_orch_mutex);
@@ -197,9 +202,13 @@ fabric_handle_t fabric_exec_lstm_async_id(int fabric_id, void* weight_ptr, void*
 
 fabric_handle_t fabric_exec_lstm_async(void* weight_ptr, void* input_ptr, void* output_ptr, int h_size, int i_size) {
     init_device();
+    uint8_t tile_mask = 0x0F;
+    const char* mask_env = getenv("FABRIC_TILE_MASK");
+    if (mask_env) tile_mask = (uint8_t)strtol(mask_env, NULL, 0);
+
     orch_task_t* task = malloc(sizeof(orch_task_t));
     task->type = OK_LSTM; task->w = weight_ptr; task->i = input_ptr; task->o = output_ptr;
-    task->r = h_size; task->c = i_size; task->tile_mask = 0x0F;
+    task->r = h_size; task->c = i_size; task->tile_mask = tile_mask;
     task->dispatched = 0; task->emu_handle = NULL;
     pthread_mutex_init(&task->mutex, NULL); pthread_cond_init(&task->cond, NULL); task->next = NULL;
     pthread_mutex_lock(&g_orch_mutex);
@@ -251,7 +260,11 @@ int fabric_submit_tfd(tfmbs_tfd_t* tfd) {
 
 void fabric_get_metrics(fabric_metrics_t* out_metrics) {
     init_device();
-    emu_fabric_get_metrics(out_metrics);
+    if (out_metrics) {
+        fabric_metrics_t m;
+        emu_fabric_get_metrics_id(g_last_dispatched_fid, &m);
+        *out_metrics = m;
+    }
 }
 
 static void ensure_resident(void* ptr, int best_fid) {
@@ -313,6 +326,7 @@ static void* orchestrator_loop(void* arg) {
         ensure_resident(task->i, best_fid);
 
         // Dispatch to emulator
+        g_last_dispatched_fid = best_fid;
         if (task->type == OK_GEMV) task->emu_handle = emu_fabric_exec_gemv_async_id(best_fid, task->w, task->i, task->o, task->r, task->c, task->tile_mask);
         else if (task->type == OK_LSTM) task->emu_handle = emu_fabric_exec_lstm_async_id(best_fid, task->w, task->i, task->o, task->r, task->c, task->tile_mask);
         else if (task->type == OK_LSTM_P) task->emu_handle = emu_fabric_exec_lstm_persistent_async(task->w, task->i, task->o, task->r, task->c, task->tile_mask);
