@@ -25,6 +25,8 @@ typedef enum {
     KERNEL_GEMV,
     KERNEL_LSTM,
     KERNEL_LSTM_PERSISTENT,
+    KERNEL_ATTN,
+    KERNEL_CONV3D,
     KERNEL_TRANSFER
 } kernel_type_t;
 
@@ -32,8 +34,10 @@ typedef struct fabric_task {
     void *weight_ptr;
     void *input_ptr;
     void *output_ptr;
+    void *aux_ptr;
     int rows;
     int cols;
+    int aux_val;
     kernel_type_t kernel;
     uint32_t exec_hints;
     uint8_t tile_mask;
@@ -187,7 +191,11 @@ void emu_fabric_init() {
     if (g_num_fabrics > 16) g_num_fabrics = 16;
 
     g_fabrics = (fabric_instance_t*)calloc(g_num_fabrics, sizeof(fabric_instance_t));
-    srand(time(NULL));
+
+    const char* seed_env = getenv("TFMBS_FIXED_SEED");
+    if (seed_env) srand(atoi(seed_env));
+    else srand(time(NULL));
+
     for (int i = 0; i < g_num_fabrics; i++) {
         init_fabric_instance(&g_fabrics[i], i);
     }
@@ -516,8 +524,56 @@ static int internal_exec_lstm(fabric_instance_t* inst, void* weight_ptr, void* i
     }
     inst->last_metrics.active_ops = inst->last_metrics.total_ops - inst->last_metrics.zero_skips;
     inst->last_metrics.fabric_cost = tfmbs_compute_cost(&inst->last_metrics, hints);
+    inst->last_metrics.semantic_efficiency = (double)inst->last_metrics.active_ops / inst->last_metrics.total_ops;
     if (inst->last_metrics.fabric_cost > 0)
         inst->last_metrics.economic_efficiency = (double)inst->last_metrics.active_ops / inst->last_metrics.fabric_cost;
+    return 0;
+}
+
+static int internal_exec_attn(fabric_instance_t* inst, void* q_ptr, void* k_ptr, void* v_ptr, void* o_ptr, int seq_len, int head_dim, uint8_t tile_mask, uint32_t hints) {
+    strncpy(inst->last_kernel_name, "ATTN", 32);
+    // Simplified: treat as two GEMMs (Q*K^T and Attn*V)
+    // For metrics, we'll use 2 * seq_len * seq_len * head_dim operations
+    long total_ops = 2L * seq_len * seq_len * head_dim;
+    inst->last_metrics.total_ops = total_ops;
+    inst->last_metrics.zero_skips = total_ops * 0.66; // Assume typical ternary sparsity
+    inst->last_metrics.active_ops = total_ops - inst->last_metrics.zero_skips;
+    inst->last_metrics.mem_reads = (total_ops / 5); // Packed access
+    inst->last_metrics.mem_writes = (long)seq_len * head_dim * 4;
+
+    int active_tiles = 0;
+    for (int i = 0; i < 8; i++) if (tile_mask & (1 << i)) active_tiles++;
+    if (active_tiles == 0) active_tiles = 1;
+    inst->last_metrics.lanes_used = active_tiles * 15;
+    inst->last_metrics.cycles = total_ops / inst->last_metrics.lanes_used;
+    inst->last_metrics.fabric_cost = tfmbs_compute_cost(&inst->last_metrics, hints);
+    inst->last_metrics.semantic_efficiency = (double)inst->last_metrics.active_ops / inst->last_metrics.total_ops;
+    if (inst->last_metrics.fabric_cost > 0)
+        inst->last_metrics.economic_efficiency = (double)inst->last_metrics.active_ops / inst->last_metrics.fabric_cost;
+
+    return 0;
+}
+
+static int internal_exec_conv3d(fabric_instance_t* inst, void* w_ptr, void* i_ptr, void* o_ptr, int out_c, int in_c, int d_h_w, uint8_t tile_mask, uint32_t hints) {
+    strncpy(inst->last_kernel_name, "CONV3D", 32);
+    // Simplified: d_h_w is volume of kernel + spatial dimensions
+    long total_ops = (long)out_c * in_c * d_h_w;
+    inst->last_metrics.total_ops = total_ops;
+    inst->last_metrics.zero_skips = total_ops * 0.7; // Typical sparsity for conv
+    inst->last_metrics.active_ops = total_ops - inst->last_metrics.zero_skips;
+    inst->last_metrics.mem_reads = (total_ops / 5);
+    inst->last_metrics.mem_writes = (long)out_c * 4;
+
+    int active_tiles = 0;
+    for (int i = 0; i < 8; i++) if (tile_mask & (1 << i)) active_tiles++;
+    if (active_tiles == 0) active_tiles = 1;
+    inst->last_metrics.lanes_used = active_tiles * 15;
+    inst->last_metrics.cycles = total_ops / inst->last_metrics.lanes_used;
+    inst->last_metrics.fabric_cost = tfmbs_compute_cost(&inst->last_metrics, hints);
+    inst->last_metrics.semantic_efficiency = (double)inst->last_metrics.active_ops / inst->last_metrics.total_ops;
+    if (inst->last_metrics.fabric_cost > 0)
+        inst->last_metrics.economic_efficiency = (double)inst->last_metrics.active_ops / inst->last_metrics.fabric_cost;
+
     return 0;
 }
 
@@ -564,6 +620,7 @@ static int internal_exec_gemv(fabric_instance_t* inst, void* w_ptr, void* i_ptr,
     }
     inst->last_metrics.active_ops = inst->last_metrics.total_ops - inst->last_metrics.zero_skips;
     inst->last_metrics.fabric_cost = tfmbs_compute_cost(&inst->last_metrics, hints);
+    inst->last_metrics.semantic_efficiency = (double)inst->last_metrics.active_ops / inst->last_metrics.total_ops;
     if (inst->last_metrics.fabric_cost > 0)
         inst->last_metrics.economic_efficiency = (double)inst->last_metrics.active_ops / inst->last_metrics.fabric_cost;
     return 0;
@@ -692,6 +749,8 @@ static void* fabric_worker_loop(void* arg) {
                 if (t->kernel == KERNEL_GEMV) internal_exec_gemv(inst, t->weight_ptr, t->input_ptr, t->output_ptr, t->rows, t->cols, t->tile_mask, t->exec_hints);
                 else if (t->kernel == KERNEL_LSTM) internal_exec_lstm(inst, t->weight_ptr, t->input_ptr, t->output_ptr, t->rows, t->cols, t->tile_mask, 0, t->exec_hints);
                 else if (t->kernel == KERNEL_LSTM_PERSISTENT) internal_exec_lstm(inst, t->weight_ptr, t->input_ptr, t->output_ptr, t->rows, t->cols, t->tile_mask, 1, t->exec_hints);
+                else if (t->kernel == KERNEL_ATTN) internal_exec_attn(inst, t->weight_ptr, t->input_ptr, t->aux_ptr, t->output_ptr, t->rows, t->cols, t->tile_mask, t->exec_hints);
+                else if (t->kernel == KERNEL_CONV3D) internal_exec_conv3d(inst, t->weight_ptr, t->input_ptr, t->output_ptr, t->rows, t->cols, t->aux_val, t->tile_mask, t->exec_hints);
                 else if (t->kernel == KERNEL_TRANSFER) emu_fabric_inter_copy(t->src_fabric_id, inst->id, t->input_ptr, t->output_ptr, t->rows);
 
                 update_learning(inst, t, &inst->last_metrics);
@@ -753,6 +812,26 @@ fabric_handle_t emu_fabric_exec_lstm_async_id(int fid, void* w, void* i, void* o
     return (fabric_handle_t)t;
 }
 fabric_handle_t emu_fabric_exec_lstm_async(void* w, void* i, void* o, int h, int is, uint8_t tm) { fabric_instance_t* inst = find_inst_by_ptr(w); return emu_fabric_exec_lstm_async_id(inst?inst->id:0, w, i, o, h, is, tm); }
+fabric_handle_t emu_fabric_exec_attn_async_id(int fid, void* q, void* k, void* v, void* o, int sl, int hd, uint8_t tm) {
+    fabric_instance_t* inst = get_inst(fid);
+    fabric_task_t* t = (fabric_task_t*)calloc(1, sizeof(fabric_task_t));
+    t->weight_ptr=q; t->input_ptr=k; t->aux_ptr=v; t->output_ptr=o; t->rows=sl; t->cols=hd; t->kernel=KERNEL_ATTN; t->tile_mask=tm; t->status=TASK_PENDING;
+    pthread_mutex_init(&t->mutex, NULL); pthread_cond_init(&t->cond, NULL);
+    pthread_mutex_lock(&inst->queue_mutex); if (inst->queue_tail) inst->queue_tail->next = t; else inst->queue_head = t; inst->queue_tail = t;
+    pthread_cond_signal(&inst->queue_cond); pthread_mutex_unlock(&inst->queue_mutex);
+    return (fabric_handle_t)t;
+}
+
+fabric_handle_t emu_fabric_exec_conv3d_async_id(int fid, void* w, void* i, void* o, int oc, int ic, int dhw, uint8_t tm) {
+    fabric_instance_t* inst = get_inst(fid);
+    fabric_task_t* t = (fabric_task_t*)calloc(1, sizeof(fabric_task_t));
+    t->weight_ptr=w; t->input_ptr=i; t->output_ptr=o; t->rows=oc; t->cols=ic; t->aux_val=dhw; t->kernel=KERNEL_CONV3D; t->tile_mask=tm; t->status=TASK_PENDING;
+    pthread_mutex_init(&t->mutex, NULL); pthread_cond_init(&t->cond, NULL);
+    pthread_mutex_lock(&inst->queue_mutex); if (inst->queue_tail) inst->queue_tail->next = t; else inst->queue_head = t; inst->queue_tail = t;
+    pthread_cond_signal(&inst->queue_cond); pthread_mutex_unlock(&inst->queue_mutex);
+    return (fabric_handle_t)t;
+}
+
 fabric_handle_t emu_fabric_exec_lstm_persistent_async(void* w, void* i, void* s, int h, int is, uint8_t tm) {
     fabric_instance_t* inst = find_inst_by_ptr(w);
     int fid = inst ? inst->id : 0;

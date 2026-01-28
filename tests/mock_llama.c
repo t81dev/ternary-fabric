@@ -5,7 +5,7 @@
 
 #define ROWS 512
 #define COLS 512
-#define ITERATIONS 3
+#define ITERATIONS 1
 
 int main() {
     size_t weight_size = 1048576; // 1MB

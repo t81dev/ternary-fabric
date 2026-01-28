@@ -44,6 +44,16 @@ fabric_handle_t tfmbs_gemm(tfmbs_tensor_t* weight, tfmbs_tensor_t* input, tfmbs_
 fabric_handle_t tfmbs_lstm_step(tfmbs_tensor_t* weight, tfmbs_tensor_t* input, tfmbs_tensor_t* output, int h_size, int i_size);
 
 /**
+ * @brief Phase 15: Ternary Attention Kernel.
+ */
+fabric_handle_t tfmbs_attn(tfmbs_tensor_t* q, tfmbs_tensor_t* k, tfmbs_tensor_t* v, tfmbs_tensor_t* o, int seq_len, int head_dim);
+
+/**
+ * @brief Phase 15: Ternary 3D Convolution Kernel.
+ */
+fabric_handle_t tfmbs_conv3d(tfmbs_tensor_t* weight, tfmbs_tensor_t* input, tfmbs_tensor_t* output, int in_c, int out_c, int dhw);
+
+/**
  * @brief Phase 18: Bind an LSTM context to tiles for persistent execution.
  */
 void tfmbs_lstm_bind(tfmbs_tensor_t* weight, tfmbs_tensor_t* state, uint8_t tile_mask);
