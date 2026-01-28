@@ -34,7 +34,9 @@ Welcome to the **Ternary Fabric** user manual. This documentation is designed to
     Optimizing llama.cpp and GGUF workflows.
 15. **[Data-Driven Adaptation](docs/19_DATA_DRIVEN_ADAPTATION.md)**
     Details on Phase 19 cost-aware scheduling and adaptive residency.
-16. **[Strategy Roadmap](docs/ROADMAP.md)**
+16. **[Learning & Self-Tuning](docs/20_LEARNING_AND_SELF_TUNING.md)**
+    Phase 20 documentation on adaptive cost modeling and scheduler weighting.
+17. **[Strategy Roadmap](docs/ROADMAP.md)**
     The project roadmap detailing completed and future phases.
 
 ---
@@ -73,9 +75,28 @@ When running with the interposer or Python API, the Fabric provides real-time te
 *   **Zero-Skips:** The number of operations eliminated because an operand was zero. Typically 50-75% for LLM workloads.
 *   **Semantic Efficiency:** The ratio of useful operations (`active_ops`) to total operations.
 *   **Economic Efficiency:** The ratio of useful operations to total `fabric_cost` (weighted sum of ops, memory, and residency misses).
+*   **Adaptive Coefficients:** (Phase 20) Real-time values for `weight_cost`, `mem_read_cost`, etc., reflecting the scheduler's learned cost model.
 *   **Pool Usage:** Current consumption of the 128MB emulation pool.
-*   **Eviction Events:** Increments when the policy (Recency + Frequency) frees space for new weight frames.
-*   **Async Queue:** Shows in-flight GEMVs being processed by the background worker thread.
+*   **Eviction Events:** Increments when the policy (Frequency + Age + Success) frees space for new weight frames.
+*   **Dynamic Batch Size:** (Phase 20) Shows the current auto-tuned batch size optimized for the current workload.
+
+---
+
+## 🤖 Adaptive Learning (Phase 20)
+
+Starting with Phase 20, the Ternary Fabric is a self-tuning co-processor. It automatically optimizes its own internal parameters based on measured performance:
+
+### Self-Tuning Cost Model
+The scheduler uses a **Hill-Climbing** algorithm to adjust its cost projection coefficients. If the actual `fabric_cost` differs from the `projected_cost`, the fabric updates its internal model to ensure more accurate tile selection in the future.
+
+### Dynamic Scheduler Weighting
+Tiles "learn" which kernels they are most efficient at executing. A tile that consistently delivers higher **Economic Efficiency** for a specific kernel (e.g., LSTM) will be favored for that kernel in future scheduling decisions.
+
+### Eviction Policy Optimization
+The eviction policy is no longer fixed LRU. It now dynamically weights **Frequency**, **Recency (Age)**, and **Residency Success Rate**. This ensures that weights critical to maintaining high efficiency are protected from eviction.
+
+### Temporal Auto-Tuning
+The asynchronous command queue automatically adjusts its **Batch Size** (between 1 and 32) to maximize a composite score of efficiency and throughput. It occasionally "explores" different batch sizes to find the optimal throughput for the current sparsity regime.
 
 ---
 
