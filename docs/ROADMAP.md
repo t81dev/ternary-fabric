@@ -130,14 +130,23 @@ Promotion of reference kernels to full hardware acceleration.
 *   **Deliverables:** Updated `frame_controller.v` and `ternary_lane_alu.v` with native support for 3D Convolution, LSTM, and Attention kernels.
 *   **Features:** Squared-stride memory addressing for CONV3D and `BIAS_EN` driven state persistence for recurrent/attention workloads.
 
-### Phase 18 — Ternary Workload Maturation & Measurement Plane ⏳
+### Phase 18 — Ternary Workload Maturation & Measurement Plane ✅
 Anchoring the fabric with workload realism and a formal programming model.
-*   **Status:** In Progress.
+*   **Status:** Complete.
 *   **Deliverables:**
     *   **Three-Tier Benchmark Suite:** Synthetic, Kernel, and Application-level measurement.
     *   **T-LSTM Promotion:** Native kernel path for recurrent stateful workloads.
     *   **Host API Surface:** Formal C/C++ primitives for fabric orchestration.
     *   **Cost Model:** Cycle-aware emulator tracking "fabric_cost" (ops + memory weighted).
+
+### Phase 19 — Data-Driven Adaptation (Cost-Aware Fabric) ⏳
+Using Phase 18 metrics to drive autonomous fabric behavior and scheduling.
+*   **Status:** In Progress.
+*   **Deliverables:**
+    *   **Cost-Aware Scheduler:** Economic tile selection based on residency and projected cost.
+    *   **Residency Policy Engine:** Adaptive pinning and scoring-based eviction (Scoring: Recency + Frequency).
+    *   **Sparse-Regime Optimization:** Micro-kernel fusion and reduced control-flow overhead.
+    *   **Temporal Pipelines:** Overlapping memory hydration with compute for recurrent workloads.
 
 ---
 
