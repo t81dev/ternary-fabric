@@ -44,9 +44,24 @@ fabric_handle_t tfmbs_gemm(tfmbs_tensor_t* weight, tfmbs_tensor_t* input, tfmbs_
 fabric_handle_t tfmbs_lstm_step(tfmbs_tensor_t* weight, tfmbs_tensor_t* input, tfmbs_tensor_t* output, int h_size, int i_size);
 
 /**
+ * @brief Phase 18: Bind an LSTM context to tiles for persistent execution.
+ */
+void tfmbs_lstm_bind(tfmbs_tensor_t* weight, tfmbs_tensor_t* state, uint8_t tile_mask);
+
+/**
+ * @brief Phase 18: Step an LSTM with persistent state.
+ */
+fabric_handle_t tfmbs_lstm_step_async(tfmbs_tensor_t* weight, tfmbs_tensor_t* input, tfmbs_tensor_t* state, int h_size, int i_size, uint8_t tile_mask);
+
+/**
  * @brief Explicit synchronization point.
  */
 void tfmbs_sync(fabric_handle_t handle);
+
+/**
+ * @brief Phase 18: Dump all metrics to a CSV file.
+ */
+void tfmbs_dump_metrics_csv(const char* path);
 
 #ifdef __cplusplus
 }

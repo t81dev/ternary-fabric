@@ -66,6 +66,12 @@ int tfmbs_dev_ioctl(int fd, unsigned long request, void* arg) {
             m->pool_used = (uint32_t)fm.pool_used;
             m->pool_total = (uint32_t)fm.pool_total;
             m->evictions = fm.eviction_count;
+            m->active_ops = fm.active_ops;
+            m->mem_reads = fm.mem_reads;
+            m->mem_writes = fm.mem_writes;
+            m->broadcasts = fm.broadcasts;
+            m->residency_hits = fm.residency_hits;
+            m->residency_misses = fm.residency_misses;
             return 0;
         }
         case TFMBS_IOC_GET_INFO: {

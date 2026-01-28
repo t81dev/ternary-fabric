@@ -35,8 +35,23 @@ fabric_handle_t tfmbs_lstm_step(tfmbs_tensor_t* weight, tfmbs_tensor_t* input, t
     return fabric_exec_lstm_async(weight->device_ptr, input->device_ptr, output->device_ptr, h_size, i_size);
 }
 
+void tfmbs_lstm_bind(tfmbs_tensor_t* weight, tfmbs_tensor_t* state, uint8_t tile_mask) {
+    if (weight && state) {
+        fabric_lstm_bind(weight->device_ptr, state->device_ptr, tile_mask);
+    }
+}
+
+fabric_handle_t tfmbs_lstm_step_async(tfmbs_tensor_t* weight, tfmbs_tensor_t* input, tfmbs_tensor_t* state, int h_size, int i_size, uint8_t tile_mask) {
+    if (!weight || !input || !state) return NULL;
+    return fabric_exec_lstm_persistent_async(weight->device_ptr, input->device_ptr, state->device_ptr, h_size, i_size, tile_mask);
+}
+
 void tfmbs_sync(fabric_handle_t handle) {
     if (handle) {
         fabric_wait(handle);
     }
+}
+
+void tfmbs_dump_metrics_csv(const char* path) {
+    fabric_dump_metrics_csv(path);
 }

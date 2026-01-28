@@ -17,11 +17,19 @@ typedef struct {
     size_t pool_used;
     size_t pool_total;
     int eviction_count;
-    // Phase 18 Metrics
-    long cycles;
-    double fabric_cost;
-    long mem_reads;
-    long mem_writes;
+
+    // Phase 18 Semantic Metrics
+    uint64_t active_ops;
+    uint64_t mem_reads;
+    uint64_t mem_writes;
+    uint64_t broadcasts;
+    uint64_t residency_hits;
+    uint64_t residency_misses;
+    uint64_t tile_local_reuse;
+
+    long     cycles;
+    double   fabric_cost;
+    double   semantic_efficiency;
 } fabric_metrics_t;
 
 typedef void* fabric_handle_t;
@@ -40,6 +48,11 @@ void fabric_register_weight(void* ptr, size_t size);
 fabric_handle_t fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols);
 fabric_handle_t fabric_exec_lstm_async(void* weight_ptr, void* input_ptr, void* output_ptr, int hidden_size, int input_size);
 int fabric_wait(fabric_handle_t handle);
+
+// Phase 18 Persistence & Telemetry
+void fabric_lstm_bind(void* weight_ptr, void* state_ptr, uint8_t tile_mask);
+fabric_handle_t fabric_exec_lstm_persistent_async(void* weight_ptr, void* input_ptr, void* state_ptr, int h_size, int i_size, uint8_t tile_mask);
+void fabric_dump_metrics_csv(const char* path);
 
 // Low-level TFD submission (Phase 10)
 int fabric_submit_tfd(tfmbs_tfd_t* tfd);
