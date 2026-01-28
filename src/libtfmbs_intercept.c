@@ -38,6 +38,9 @@ static void* (*real_mmap)(void*, size_t, int, int, int, off_t) = NULL;
 static __thread int in_interposer = 0;
 static int initializing = 0;
 static int g_short_circuit_enabled = 0;
+static int g_debug_enabled = 0;
+static int g_validate_enabled = 0;
+static struct sigaction g_old_sa;
 
 #define FABRIC_THRESHOLD (1024)
 #define MAX_ALLOCS 1024
@@ -47,6 +50,9 @@ typedef struct {
     void* ptr; size_t size; void* pt5_ptr; fabric_state_t state;
     size_t pages_touched;
     fabric_handle_t pending_handle;
+    int pending_rows, pending_cols;
+    void* pending_weight_ptr;
+    void* pending_input_ptr;
     unsigned long last_read_seq;
     unsigned long last_write_seq;
 } fabric_metadata_t;
@@ -56,6 +62,7 @@ static int g_num_allocs = 0;
 static unsigned long g_access_seq = 0;
 static pthread_mutex_t g_reg_mutex = PTHREAD_MUTEX_INITIALIZER;
 static void* g_scratch_packed_in = NULL;
+static void* g_scratch_validate_out = NULL;
 
 static fabric_metadata_t* find_meta(const void* ptr) {
     for (int i = 0; i < g_num_allocs; i++) {
@@ -102,8 +109,48 @@ static void sigsegv_handler(int sig, siginfo_t* si, void* unused) {
         if (m->pending_handle) {
             fabric_handle_t h = m->pending_handle;
             m->pending_handle = NULL;
-            safe_log("[TFMBS] Waiting for pending async GEMV on %p\n", m->ptr);
-            fabric_wait(h);
+            if (g_debug_enabled) safe_log("[TFMBS-Debug] Waiting for pending async GEMV on %p\n", m->ptr);
+            int status = fabric_wait(h);
+            if (status != 0) safe_log("[TFMBS] Warning: fabric_wait returned %d\n", status);
+
+            if (g_validate_enabled && m->pending_weight_ptr && m->pending_input_ptr) {
+                safe_log("[TFMBS-Validate] Validating Fabric output for %p...\n", m->ptr);
+                mprotect(m->ptr, m->size, PROT_READ);
+                int saved_ii = in_interposer; in_interposer = 1;
+
+                fabric_metadata_t* wm = find_meta(m->pending_weight_ptr);
+                fabric_metadata_t* im = find_meta(m->pending_input_ptr);
+
+                if (wm && im) {
+                    int32_t* ref_out = (int32_t*)g_scratch_validate_out;
+                    if (mprotect(wm->ptr, wm->size, PROT_READ) != 0) safe_log("[TFMBS-Validate] mprotect weight failed: %s\n", strerror(errno));
+                    if (mprotect(im->ptr, im->size, PROT_READ) != 0) safe_log("[TFMBS-Validate] mprotect input failed: %s\n", strerror(errno));
+
+                    for (int r = 0; r < m->pending_rows; r++) {
+                        int32_t acc = 0;
+                        for (int c = 0; c < m->pending_cols; c++) {
+                            acc += (int32_t)((int8_t*)wm->ptr)[r * m->pending_cols + c] *
+                                   (int32_t)((int8_t*)im->ptr)[c];
+                        }
+                        ref_out[r] = acc;
+                    }
+
+                    int errors = 0;
+                    for (int r = 0; r < m->pending_rows; r++) {
+                        if (((int32_t*)m->ptr)[r] != ref_out[r]) {
+                            if (errors < 5) safe_log("[TFMBS-Validate] Mismatch at row %d: Fabric=%d, CPU=%d\n", r, ((int32_t*)m->ptr)[r], ref_out[r]);
+                            errors++;
+                        }
+                    }
+                    if (errors == 0) safe_log("[TFMBS-Validate] ⭐ MATCH verified for %p\n", m->ptr);
+                    else safe_log("[TFMBS-Validate] ❌ ERROR: %d mismatches found in %p\n", errors, m->ptr);
+
+                    mprotect(wm->ptr, wm->size, PROT_NONE);
+                    mprotect(im->ptr, im->size, PROT_READ | PROT_WRITE);
+                }
+                in_interposer = saved_ii;
+            }
+
             mprotect(m->ptr, m->size, PROT_READ | PROT_WRITE);
             in_interposer = saved; return;
         }
@@ -154,7 +201,6 @@ static void sigsegv_handler(int sig, siginfo_t* si, void* unused) {
                 if (rows > 4096) rows = 4096; // Increased safety caps
                 if (cols > 4096) cols = 4096;
 
-                if (!g_scratch_packed_in) g_scratch_packed_in = fabric_alloc(4096*4096);
                 safe_log("[TFMBS] Offloading GEMV (Dynamic): W=%p, I=%p, O=%p (%dx%d)\n", m->ptr, in_buf->ptr, out_buf->ptr, rows, cols);
 
                 mprotect(in_buf->ptr, in_buf->size, PROT_READ);
@@ -163,6 +209,12 @@ static void sigsegv_handler(int sig, siginfo_t* si, void* unused) {
                 // Set output buffer to PROT_NONE and mark as pending
                 mprotect(out_buf->ptr, out_buf->size, PROT_NONE);
                 out_buf->pending_handle = fabric_exec_gemv_async(m->pt5_ptr, g_scratch_packed_in, out_buf->ptr, rows, cols);
+                out_buf->pending_rows = rows;
+                out_buf->pending_cols = cols;
+                out_buf->pending_weight_ptr = m->ptr;
+                out_buf->pending_input_ptr = in_buf->ptr;
+
+                if (g_debug_enabled) safe_log("[TFMBS-Debug] Offload Triggered: W=%p, I=%p, O=%p (%dx%d)\n", m->ptr, in_buf->ptr, out_buf->ptr, rows, cols);
 
                 if (g_short_circuit_enabled) {
                     ucontext_t* uc = (ucontext_t*)unused;
@@ -198,38 +250,69 @@ static void sigsegv_handler(int sig, siginfo_t* si, void* unused) {
         }
         in_interposer = saved; return;
     }
-    in_interposer = saved; _exit(1);
+
+    // Address not in registry: Fallback to previous handler
+    if (g_old_sa.sa_flags & SA_SIGINFO) {
+        g_old_sa.sa_sigaction(sig, si, unused);
+    } else if (g_old_sa.sa_handler == SIG_DFL) {
+        // Reset to default and return, allowing instruction to re-trigger fault
+        sigaction(SIGSEGV, &g_old_sa, NULL);
+    } else if (g_old_sa.sa_handler != SIG_IGN) {
+        g_old_sa.sa_handler(sig);
+    }
+    in_interposer = saved;
 }
 
-static void reg_alloc(void* ptr, size_t size) {
+static void reg_alloc_internal(void* ptr, size_t size, fabric_state_t initial_state) {
+    if (g_debug_enabled) safe_log("[TFMBS-Debug] Registry Add: %p (%zu bytes, state=%d)\n", ptr, size, (int)initial_state);
     pthread_mutex_lock(&g_reg_mutex);
     if (g_num_allocs < MAX_ALLOCS) {
         g_registry[g_num_allocs].ptr = ptr; g_registry[g_num_allocs].size = size;
-        g_registry[g_num_allocs].pt5_ptr = NULL; g_registry[g_num_allocs].state = STATE_RAW;
+        g_registry[g_num_allocs].pt5_ptr = NULL; g_registry[g_num_allocs].state = initial_state;
         g_registry[g_num_allocs].pages_touched = 0;
         g_registry[g_num_allocs].pending_handle = NULL;
         g_registry[g_num_allocs].last_read_seq = 0;
         g_registry[g_num_allocs].last_write_seq = 0;
-        mprotect(ptr, size, PROT_NONE);
         g_num_allocs++;
     }
     pthread_mutex_unlock(&g_reg_mutex);
 }
 
 static void init() __attribute__((constructor));
+static void init();
+
+static void reg_alloc(void* ptr, size_t size) {
+    reg_alloc_internal(ptr, size, STATE_RAW);
+    mprotect(ptr, size, PROT_NONE);
+}
+
+void fabric_register_weight(void* ptr, size_t size) {
+    init();
+    safe_log("[TFMBS] Explicit weight registration: %p (%zu bytes)\n", ptr, size);
+    reg_alloc_internal(ptr, size, STATE_READY_TO_PACK);
+    mprotect(ptr, size, PROT_NONE);
+}
 static void init() {
     if (real_malloc || initializing) return;
     initializing = 1;
     const char* sc = getenv("FABRIC_SHORT_CIRCUIT");
     if (sc && sc[0] == '1') g_short_circuit_enabled = 1;
+    const char* dbg = getenv("TFMBS_DEBUG");
+    if (dbg && dbg[0] == '1') g_debug_enabled = 1;
+    const char* val = getenv("TFMBS_VALIDATE");
+    if (val && val[0] == '1') g_validate_enabled = 1;
+
     struct sigaction sa; sa.sa_flags = SA_SIGINFO; sigemptyset(&sa.sa_mask);
-    sa.sa_sigaction = sigsegv_handler; sigaction(SIGSEGV, &sa, NULL);
+    sa.sa_sigaction = sigsegv_handler;
+    sigaction(SIGSEGV, &sa, &g_old_sa);
     real_malloc = dlsym(RTLD_NEXT, "malloc");
     real_free = dlsym(RTLD_NEXT, "free");
     real_realloc = dlsym(RTLD_NEXT, "realloc");
     real_memcpy = dlsym(RTLD_NEXT, "memcpy");
     real_memset = dlsym(RTLD_NEXT, "memset");
     real_mmap = dlsym(RTLD_NEXT, "mmap");
+    g_scratch_packed_in = fabric_alloc(4096*4096);
+    g_scratch_validate_out = fabric_alloc(4096*4096);
     initializing = 0;
 }
 

@@ -179,17 +179,32 @@ void* emu_fabric_alloc(size_t size) {
         }
 
         // No block found, try evicting
-        int any_used = 0;
+        int any_evictable = 0;
         curr = g_blocks;
-        while(curr) { if(curr->used && curr->busy_count == 0) any_used=1; curr=curr->next; }
+        while(curr) { if(curr->used && curr->busy_count == 0) any_evictable=1; curr=curr->next; }
 
-        if (!any_used) {
-            fprintf(stderr, "[TFMBS-Device] Out of Fabric Memory even after full eviction! Requested %zu\n", aligned_size);
+        if (!any_evictable) {
+            // Check if there are ANY free blocks (even if too small)
+            int any_free = 0;
+            curr = g_blocks;
+            while(curr) { if(!curr->used) any_free=1; curr=curr->next; }
+
+            if (!any_free) {
+                fprintf(stderr, "[TFMBS-Device] Out of Fabric Memory: All blocks are BUSY. Requested %zu\n", aligned_size);
+                pthread_mutex_unlock(&g_fabric_mutex);
+                return NULL;
+            }
+        }
+
+        if (any_evictable) {
+            evict_lru();
+        } else {
+            // We have some free blocks but they are not large enough or fragmented
+            // and we can't evict anything else.
+            fprintf(stderr, "[TFMBS-Device] Out of Fabric Memory: Fragmentation or Busy blocks. Requested %zu\n", aligned_size);
             pthread_mutex_unlock(&g_fabric_mutex);
             return NULL;
         }
-
-        evict_lru();
 
         // Coalesce free blocks
         curr = g_blocks;
@@ -463,8 +478,8 @@ fabric_handle_t emu_fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, vo
     return (fabric_handle_t)task;
 }
 
-void emu_fabric_wait(fabric_handle_t handle) {
-    if (!handle) return;
+int emu_fabric_wait(fabric_handle_t handle) {
+    if (!handle) return -1;
     fabric_task_t* task = (fabric_task_t*)handle;
 
     pthread_mutex_lock(&task->mutex);
@@ -476,6 +491,7 @@ void emu_fabric_wait(fabric_handle_t handle) {
     pthread_mutex_destroy(&task->mutex);
     pthread_cond_destroy(&task->cond);
     free(task);
+    return 0;
 }
 
 static void* fabric_worker_loop(void* arg) {

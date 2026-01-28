@@ -27,9 +27,12 @@ int fabric_memcpy_to(void* dest_fabric, const void* src_host, size_t size, int p
 int fabric_memcpy_from(void* dest_host, const void* src_fabric, size_t size, int unpack_pt5);
 int fabric_exec_gemv(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols);
 
+// Cooperative API (Phase 16)
+void fabric_register_weight(void* ptr, size_t size);
+
 // Async API (Phase 8)
 fabric_handle_t fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols);
-void fabric_wait(fabric_handle_t handle);
+int fabric_wait(fabric_handle_t handle);
 
 // Low-level TFD submission (Phase 10)
 int fabric_submit_tfd(tfmbs_tfd_t* tfd);

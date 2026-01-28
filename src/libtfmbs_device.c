@@ -105,14 +105,13 @@ fabric_handle_t fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, void* 
     return emu_fabric_exec_gemv_async(weight_ptr, input_ptr, output_ptr, rows, cols, tile_mask);
 }
 
-void fabric_wait(fabric_handle_t handle) {
+int fabric_wait(fabric_handle_t handle) {
     init_device();
     if (g_tfmbs_fd >= 0) {
         tfmbs_ioc_wait_t args = { .handle = (uint64_t)handle };
-        tfmbs_dev_ioctl(g_tfmbs_fd, TFMBS_IOC_WAIT, &args);
-        return;
+        return tfmbs_dev_ioctl(g_tfmbs_fd, TFMBS_IOC_WAIT, &args);
     }
-    emu_fabric_wait(handle);
+    return emu_fabric_wait(handle);
 }
 
 int fabric_submit_tfd(tfmbs_tfd_t* tfd) {
