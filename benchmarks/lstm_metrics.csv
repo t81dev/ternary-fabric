@@ -1,3 +1,0 @@
-zero_skips,total_ops,active_ops,mem_reads,mem_writes,broadcasts,residency_hits,residency_misses,cycles,fabric_cost,semantic_efficiency
-699703,2097152,1397449,419634,8192,0,15,0,3072,3561155.00,0.3924
-699703,2097152,1397449,419634,8192,0,15,0,0,3072,3561155.00,0.3924

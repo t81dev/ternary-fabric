@@ -30,6 +30,7 @@ typedef struct {
     long     cycles;
     double   fabric_cost;
     double   semantic_efficiency;
+    double   economic_efficiency;
 } fabric_metrics_t;
 
 typedef void* fabric_handle_t;
@@ -53,6 +54,7 @@ int fabric_wait(fabric_handle_t handle);
 void fabric_lstm_bind(void* weight_ptr, void* state_ptr, uint8_t tile_mask);
 fabric_handle_t fabric_exec_lstm_persistent_async(void* weight_ptr, void* input_ptr, void* state_ptr, int h_size, int i_size, uint8_t tile_mask);
 void fabric_dump_metrics_csv(const char* path);
+void fabric_dump_economic_csv(const char* path);
 
 // Low-level TFD submission (Phase 10)
 int fabric_submit_tfd(tfmbs_tfd_t* tfd);

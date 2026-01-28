@@ -7,12 +7,22 @@ Phase 19 focuses on transforming the Fabric from a passive executor into an acti
 The scheduler now selects tiles based on **projected cost** rather than fixed or round-robin assignment.
 
 ### projected_cost(tile, kernel, tensors)
-- **Residency Hits:** Prefers tiles where weights or inputs are already resident.
+- **Residency Hits (Rebates):** Prefers tiles where weights or inputs are already resident (providing negative cost).
+- **Hysteresis:** A small sticky-tile boost (0.5 cost reduction) is applied if the tile is already assigned to the weight block to prevent economic jitter.
 - **Broadcast Reuse:** Accounts for the cost of moving data between tiles.
-- **Memory Reads/Writes:** Estimates the I/O cost for the specific kernel.
-- **Tile Local Reuse:** Favors tiles that have previously processed similar data.
+- **Historical Efficiency:** Factor in the `semantic_efficiency` recorded for that tile.
 
-## 2. Residency Policy Engine
+## 2. Economic Introspection
+
+Phase 19 hardened implementation exposes the underlying decision logic via `economic_metrics.csv`.
+
+### Tracked Fields
+- `projected_cost`: The estimated cost for the best-performing tile.
+- `residency_rebate`: The negative cost applied due to data locality.
+- `chosen_tile_id`: The primary tile selected by the scheduler.
+- `eviction_scores`: A list of policy scores for blocks evicted during kernel allocation.
+
+## 3. Residency Policy Engine
 
 Adaptive memory management replaces static LRU.
 

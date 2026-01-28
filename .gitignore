@@ -47,6 +47,7 @@ venv/
 # --- Ternary Data & Logs ---
 *.tfrm
 *.tfd
+*.csv
 weights.txt
 trace.vcd
 waveform.vcd

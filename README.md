@@ -159,26 +159,26 @@ LD_PRELOAD=./libtfmbs_intercept.so ./llama-cli -m model.gguf
 ### Telemetry Insights
 
 ```text
-[TFMBS-Telemetry] GEMV Completed
-  - Zero-Skips: 172,401 (65.8% reduction in total operations)
-  - Pool Usage: 84.2 MB / 128 MB (LRU Managed)
-  - Async Queue: 0 in-flight (Non-blocking execution)
+[TFMBS-Telemetry] Batch of 8 GEMV(s) Completed
+  - Zero-Skips: 497,990 (95.0% reduction)
+  - Cycles:     7,427 (Cost: 568023.0, Sem-Eff: 0.05, Econ-Eff: 0.05)
+  - Residency:  Hits: 54, Misses: 0
+  - Pool Usage: 0.5 MB / 128 MB (0.4%)
+  - Evictions:  0
 ```
 
-Telemetry exposes sparsity, residency, and queue pressure in real time.
+Telemetry exposes sparsity, residency, economic cost, and semantic efficiency in real time.
 
 ---
 
 ## 🏗️ Project State & Architecture
 
-The project is currently in **Phase 15**, representing full-stack operation:
+The project is currently in **Phase 19**, representing a **Cost-Aware Economic Fabric**:
 
-* PyTorch frontends
-* GGUF ingestion
-* Multi-tile emulation
-* IOCTL device layer
-* Interposition illusion
-* RTL kernel parity
+* **Economic Introspection:** Decisions are driven by projected cost and residency rebates.
+* **Hysteresis Scheduling:** Stabilized tile selection to prevent state thrashing.
+* **Sparse-Stress Hardening:** Verified performance at 99%+ sparsity.
+* **Temporal Pipelining:** Overlapping memory hydration with compute.
 
 ### Architecture Layers
 
