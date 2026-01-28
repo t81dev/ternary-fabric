@@ -12,10 +12,12 @@
 #define FABRIC_POOL_SIZE (128 * 1024 * 1024) // 128 MB for emulation
 
 typedef enum { TASK_PENDING, TASK_RUNNING, TASK_DONE, TASK_SHUTDOWN } task_status_t;
+typedef enum { KERNEL_GEMV, KERNEL_LSTM } kernel_type_t;
 
 typedef struct fabric_task {
     void *weight_ptr, *input_ptr, *output_ptr;
     int rows, cols;
+    kernel_type_t kernel;
     uint8_t tile_mask;
     volatile task_status_t status;
     pthread_mutex_t mutex;
@@ -362,8 +364,63 @@ int emu_fabric_memcpy_from(void* dest_host, const void* src_fabric, size_t size,
     return 0;
 }
 
-static int8_t g_w_trits[2000000];
-static int8_t g_i_trits[2000000];
+static int8_t g_w_trits[8000000];
+static int8_t g_i_trits[8000000];
+
+static int internal_exec_lstm(void* weight_ptr, void* input_ptr, void* output_ptr, int h_size, int i_size, uint8_t tile_mask) {
+    weight_ptr = to_device_ptr(weight_ptr);
+    input_ptr = to_device_ptr(input_ptr);
+    output_ptr = to_device_ptr(output_ptr);
+
+    // Simulation of 4 gates (i, f, g, o)
+    // Weights: [4 * h_size, i_size + h_size]
+    int rows = 4 * h_size;
+    int cols = i_size + h_size;
+
+    // Unpack weights (limited for simulation)
+    uint8_t* w_packed = (uint8_t*)weight_ptr;
+    for (int i = 0; i < (rows * cols + 4) / 5 && i * 5 < 8000000; i++) {
+        int8_t trits[5];
+        unpack_byte_to_trits(w_packed[i], trits);
+        for (int j = 0; j < 5; j++) {
+            if (i * 5 + j < rows * cols) g_w_trits[i * 5 + j] = trits[j];
+        }
+    }
+
+    // Unpack inputs (x and h_prev concatenated)
+    uint8_t* i_packed = (uint8_t*)input_ptr;
+    for (int i = 0; i < (cols + 4) / 5 && i * 5 < 8000000; i++) {
+        int8_t trits[5];
+        unpack_byte_to_trits(i_packed[i], trits);
+        for (int j = 0; j < 5; j++) {
+            if (i * 5 + j < cols) g_i_trits[i * 5 + j] = trits[j];
+        }
+    }
+
+    g_last_metrics.zero_skips = 0;
+    g_last_metrics.total_ops = (long)rows * cols;
+    g_last_metrics.mem_reads = (rows * cols) / 5 + cols / 5;
+    g_last_metrics.mem_writes = rows * 4;
+    g_last_metrics.cycles = rows + cols; // Rough estimation
+
+    int32_t* results = (int32_t*)output_ptr;
+    for (int r = 0; r < rows; r++) {
+        int32_t acc = 0;
+        for (int c = 0; c < cols; c++) {
+            int8_t w = g_w_trits[r * cols + c];
+            int8_t x = g_i_trits[c];
+            if (w == 0 || x == 0) g_last_metrics.zero_skips++;
+            else acc += (int32_t)w * (int32_t)x;
+        }
+        results[r] = acc;
+    }
+
+    g_last_metrics.sim_cycle_reduction = (double)g_last_metrics.zero_skips / g_last_metrics.total_ops * 100.0;
+    g_last_metrics.fabric_cost = (g_last_metrics.total_ops - g_last_metrics.zero_skips) * 1.0 +
+                                 g_last_metrics.mem_reads * 5.0 +
+                                 g_last_metrics.mem_writes * 8.0;
+    return 0;
+}
 
 static int internal_exec_gemv(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols, uint8_t tile_mask) {
     // Use device-side mappings to bypass interposer protections
@@ -391,26 +448,23 @@ static int internal_exec_gemv(void* weight_ptr, void* input_ptr, void* output_pt
         }
     }
 
-    // Reset Metrics
-    g_last_metrics.zero_skips = 0;
-    g_last_metrics.total_ops = (long)rows * cols;
-
     // Multi-Tile Simulation: count active tiles in mask
     int active_tiles = 0;
     for (int i = 0; i < 8; i++) if (tile_mask & (1 << i)) active_tiles++;
     if (active_tiles == 0) active_tiles = 1; // Fallback
 
+    // Reset Metrics
+    g_last_metrics.zero_skips = 0;
+    g_last_metrics.total_ops = (long)rows * cols;
     g_last_metrics.lanes_used = active_tiles * 15;
+    g_last_metrics.mem_reads = (rows * cols) / 5 + cols / 5;
+    g_last_metrics.mem_writes = rows * 4;
+    g_last_metrics.cycles = (rows * cols) / g_last_metrics.lanes_used;
 
     // GEMV with Zero-Skip Emulation and Tile partitioning
     int32_t* results = (int32_t*)output_ptr;
 
-    // We simulate partitioning by distributing rows across tiles.
-    // In reality, each tile might have its own SRAM, but here they share the pool.
     for (int r = 0; r < rows; r++) {
-        int tile_index = (r % active_tiles);
-        (void)tile_index; // Simulating that different tiles handle different rows
-
         int32_t acc = 0;
         for (int c = 0; c < cols; c++) {
             int8_t w = g_w_trits[r * cols + c];
@@ -425,6 +479,10 @@ static int internal_exec_gemv(void* weight_ptr, void* input_ptr, void* output_pt
     }
 
     g_last_metrics.sim_cycle_reduction = (double)g_last_metrics.zero_skips / g_last_metrics.total_ops * 100.0;
+    g_last_metrics.fabric_cost = (g_last_metrics.total_ops - g_last_metrics.zero_skips) * 1.0 +
+                                 g_last_metrics.mem_reads * 5.0 +
+                                 g_last_metrics.mem_writes * 8.0 +
+                                 (active_tiles > 1 ? (rows * cols / 5) * 0.5 : 0); // Broadcast bonus
     return 0;
 }
 
@@ -442,6 +500,11 @@ int emu_fabric_exec_gemv(void* weight_ptr, void* input_ptr, void* output_ptr, in
     return internal_exec_gemv(weight_ptr, input_ptr, output_ptr, rows, cols, tile_mask);
 }
 
+int emu_fabric_exec_lstm(void* weight_ptr, void* input_ptr, void* output_ptr, int h_size, int i_size, uint8_t tile_mask) {
+    if (!emu_is_fabric_ptr(weight_ptr) || !emu_is_fabric_ptr(input_ptr) || !emu_is_fabric_ptr(output_ptr)) return -1;
+    return internal_exec_lstm(weight_ptr, input_ptr, output_ptr, h_size, i_size, tile_mask);
+}
+
 fabric_handle_t emu_fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, void* output_ptr, int rows, int cols, uint8_t tile_mask) {
     init_fabric_pool();
 
@@ -451,6 +514,7 @@ fabric_handle_t emu_fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, vo
     task->output_ptr = output_ptr;
     task->rows = rows;
     task->cols = cols;
+    task->kernel = KERNEL_GEMV;
     task->tile_mask = tile_mask;
     task->status = TASK_PENDING;
     pthread_mutex_init(&task->mutex, NULL);
@@ -475,6 +539,34 @@ fabric_handle_t emu_fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, vo
     pthread_cond_signal(&g_queue_cond);
     pthread_mutex_unlock(&g_queue_mutex);
 
+    return (fabric_handle_t)task;
+}
+
+fabric_handle_t emu_fabric_exec_lstm_async(void* weight_ptr, void* input_ptr, void* output_ptr, int h_size, int i_size, uint8_t tile_mask) {
+    init_fabric_pool();
+    fabric_task_t* task = (fabric_task_t*)malloc(sizeof(fabric_task_t));
+    task->weight_ptr = weight_ptr;
+    task->input_ptr = input_ptr;
+    task->output_ptr = output_ptr;
+    task->rows = h_size;
+    task->cols = i_size;
+    task->kernel = KERNEL_LSTM;
+    task->tile_mask = tile_mask;
+    task->status = TASK_PENDING;
+    pthread_mutex_init(&task->mutex, NULL);
+    pthread_cond_init(&task->cond, NULL);
+    task->next = NULL;
+
+    pthread_mutex_lock(&g_queue_mutex);
+    if (g_queue_tail) { g_queue_tail->next = task; g_queue_tail = task; }
+    else { g_queue_head = g_queue_tail = task; }
+
+    pthread_mutex_lock(&g_fabric_mutex);
+    set_busy(weight_ptr, 1); set_busy(input_ptr, 1); set_busy(output_ptr, 1);
+    pthread_mutex_unlock(&g_fabric_mutex);
+
+    pthread_cond_signal(&g_queue_cond);
+    pthread_mutex_unlock(&g_queue_mutex);
     return (fabric_handle_t)task;
 }
 
@@ -522,7 +614,11 @@ static void* fabric_worker_loop(void* arg) {
         update_access(task->output_ptr);
         pthread_mutex_unlock(&g_fabric_mutex);
 
-        internal_exec_gemv(task->weight_ptr, task->input_ptr, task->output_ptr, task->rows, task->cols, task->tile_mask);
+        if (task->kernel == KERNEL_LSTM) {
+            internal_exec_lstm(task->weight_ptr, task->input_ptr, task->output_ptr, task->rows, task->cols, task->tile_mask);
+        } else {
+            internal_exec_gemv(task->weight_ptr, task->input_ptr, task->output_ptr, task->rows, task->cols, task->tile_mask);
+        }
 
         // Unpin blocks
         pthread_mutex_lock(&g_fabric_mutex);
@@ -539,6 +635,7 @@ static void* fabric_worker_loop(void* arg) {
         fprintf(stderr, "\n[TFMBS-Telemetry] GEMV Completed\n");
         fprintf(stderr, "  - Active Tiles: %d (mask 0x%02x)\n", active_tiles_telemetry, task->tile_mask);
         fprintf(stderr, "  - Zero-Skips: %ld (%.1f%% reduction)\n", g_last_metrics.zero_skips, g_last_metrics.sim_cycle_reduction);
+        fprintf(stderr, "  - Cycles:     %ld (Cost: %.1f)\n", g_last_metrics.cycles, g_last_metrics.fabric_cost);
         fprintf(stderr, "  - Pool Usage: %zu / %zu bytes (%.1f%%)\n", g_last_metrics.pool_used, g_last_metrics.pool_total, (double)g_last_metrics.pool_used / g_last_metrics.pool_total * 100.0);
         fprintf(stderr, "  - Evictions:  %d\n", g_last_metrics.eviction_count);
 
