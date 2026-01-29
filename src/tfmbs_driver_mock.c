@@ -72,6 +72,8 @@ int tfmbs_dev_ioctl(int fd, unsigned long request, void* arg) {
             m->broadcasts = fm.broadcasts;
             m->residency_hits = fm.residency_hits;
             m->residency_misses = fm.residency_misses;
+            m->fallback_count = fm.fallback_count;
+            m->offload_count = fm.offload_count;
             return 0;
         }
         case TFMBS_IOC_GET_INFO: {
@@ -87,6 +89,19 @@ int tfmbs_dev_ioctl(int fd, unsigned long request, void* arg) {
             printf("[TFMBS-Driver] TFD Submitted: Base=0x%lx, Kernel=0x%02x, Tiles=0x%02x\n",
                    tfd->base_addr, kernel, tfd->tile_mask);
             // In a real driver, this would kick off the hardware DMA/execution
+            return 0;
+        }
+        case TFMBS_IOC_QUERY_RES: {
+            tfmbs_ioc_residency_t* r = (tfmbs_ioc_residency_t*)arg;
+            r->is_resident = emu_is_fabric_ptr((void*)r->addr);
+            return 0;
+        }
+        case TFMBS_IOC_PIN_MEM: {
+            printf("[TFMBS-Driver] Pinning memory at 0x%lx\n", ((tfmbs_ioc_residency_t*)arg)->addr);
+            return 0;
+        }
+        case TFMBS_IOC_UNPIN_MEM: {
+            printf("[TFMBS-Driver] Unpinning memory at 0x%lx\n", ((tfmbs_ioc_residency_t*)arg)->addr);
             return 0;
         }
         default:

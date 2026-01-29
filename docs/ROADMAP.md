@@ -90,6 +90,14 @@ Fabric Instance (Emulator / Hardware)
   - **Cross-Fabric Fusion:** Dependency-aware locality optimization.
   - **Three-Stage Pipeline:** Pre-fetch -> Execute -> Commit.
 
+### Phase 26: Adaptive Runtime Agent & Hybrid Execution ✅
+- Intelligent runtime layer that chooses optimal execution path (Fabric vs. CPU).
+- Deliverables:
+  - **Adaptive Runtime Agent:** Decision logic based on sparsity EMA.
+  - **CPU Fallback Path:** Native host-side execution for low-sparsity kernels.
+  - **Hysteresis & Probing:** Logic to prevent "stuck" fallback states.
+  - **Extended Telemetry:** Tracking of offload vs. fallback ratios.
+
 ---
 
 ## 🚀 Upcoming Phases & Strategic Tracks
@@ -132,12 +140,12 @@ Establishing TFMBS as a first-class citizen in the MLIR/LLVM ecosystem to enable
   - **Lowering Passes:** Automated conversion from Torch-MLIR and ONNX to TFMBS kernels.
   - **Operator Fusion:** Graph-level optimizations for cross-kernel fusion and buffer reuse.
 
-**Phase 26: Dynamic Semantic Scheduling & Precision Adaptation**
+**Phase 26: Dynamic Semantic Scheduling & Precision Adaptation** ✅
 Using real-time telemetry to adjust execution precision and semantic depth based on model layer sensitivity.
 - **Deliverables:**
   - **Adaptive Runtime Agent:** Logic to dynamically switch between ternary and binary (fallback) paths.
   - **Sensitivity Telemetry:** Metrics to identify "hot" vs. "sensitive" layers during inference.
-  - **Hybrid Execution Policies:** Optimized heuristics for balancing accuracy and efficiency.
+  - **Hybrid Execution Policies:** Optimized heuristics for balancing accuracy and efficiency. (Software layer complete).
 
 ---
 

@@ -149,6 +149,7 @@ static void init_fabric_instance(fabric_instance_t* inst, int id) {
     inst->blocks->size = FABRIC_POOL_SIZE;
     inst->access_counter = 0;
     pthread_mutex_init(&inst->mutex, NULL);
+    memset(&inst->last_metrics, 0, sizeof(fabric_metrics_t));
     inst->last_metrics.pool_total = FABRIC_POOL_SIZE;
 
     inst->proj_params.weight_cost = 1.0;

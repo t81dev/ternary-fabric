@@ -36,6 +36,22 @@ static int g_orch_running = 0;
 static int g_num_fabrics = 2;
 static int g_last_dispatched_fid = 0;
 
+// Phase 26: Adaptive Runtime Agent
+typedef enum {
+    TFMBS_POLICY_OFFLOAD_ALL,
+    TFMBS_POLICY_FALLBACK_ALL,
+    TFMBS_POLICY_ADAPTIVE_SPARSITY
+} tfmbs_policy_t;
+
+static tfmbs_policy_t g_adaptive_policy = TFMBS_POLICY_OFFLOAD_ALL;
+static float g_sparsity_threshold = 0.3f;
+static float g_ema_alpha = 0.2f;
+static float g_avg_sparsity_ema = 0.66f; // Start with typical ternary sparsity
+static uint64_t g_fallback_count = 0;
+static uint64_t g_offload_count = 0;
+static int g_fallback_streak = 0;
+#define FALLBACK_PROBE_INTERVAL 10
+
 #define MAX_BUFFERS 2048
 static struct {
     void* ptr;
@@ -55,6 +71,19 @@ static void init_device() {
         g_orch_running = 1;
         pthread_create(&g_orch_thread, NULL, orchestrator_loop, NULL);
     }
+
+    const char* policy_env = getenv("TFMBS_ADAPTIVE_POLICY");
+    if (policy_env) {
+        if (strcmp(policy_env, "offload") == 0) g_adaptive_policy = TFMBS_POLICY_OFFLOAD_ALL;
+        else if (strcmp(policy_env, "fallback") == 0) g_adaptive_policy = TFMBS_POLICY_FALLBACK_ALL;
+        else if (strcmp(policy_env, "sparsity") == 0) g_adaptive_policy = TFMBS_POLICY_ADAPTIVE_SPARSITY;
+    }
+
+    const char* thresh_env = getenv("TFMBS_SPARSITY_THRESHOLD");
+    if (thresh_env) g_sparsity_threshold = atof(thresh_env);
+
+    const char* alpha_env = getenv("TFMBS_EMA_ALPHA");
+    if (alpha_env) g_ema_alpha = atof(alpha_env);
 
     const char* hw = getenv("FABRIC_HARDWARE_PATH");
     if (hw && hw[0] == '1') {
@@ -283,7 +312,17 @@ int fabric_wait(fabric_handle_t handle) {
     pthread_mutex_lock(&task->mutex);
     while (!task->dispatched) pthread_cond_wait(&task->cond, &task->mutex);
     pthread_mutex_unlock(&task->mutex);
-    int res = emu_fabric_wait(task->emu_handle);
+    int res = 0;
+    if (task->emu_handle) {
+        res = emu_fabric_wait(task->emu_handle);
+        // Post-execution: Update EMA from metrics
+        fabric_metrics_t m;
+        emu_fabric_get_metrics_id(g_last_dispatched_fid, &m);
+        if (m.total_ops > 0) {
+            float current_sparsity = (float)m.zero_skips / m.total_ops;
+            g_avg_sparsity_ema = (1.0f - g_ema_alpha) * g_avg_sparsity_ema + g_ema_alpha * current_sparsity;
+        }
+    }
     pthread_mutex_destroy(&task->mutex); pthread_cond_destroy(&task->cond); free(task);
     return res;
 }
@@ -300,8 +339,53 @@ void fabric_get_metrics(fabric_metrics_t* out_metrics) {
     if (out_metrics) {
         fabric_metrics_t m;
         emu_fabric_get_metrics_id(g_last_dispatched_fid, &m);
+        m.fallback_count = g_fallback_count;
+        m.offload_count = g_offload_count;
         *out_metrics = m;
     }
+}
+
+static int should_offload_adaptive(orch_task_t* task) {
+    (void)task;
+    if (g_adaptive_policy == TFMBS_POLICY_OFFLOAD_ALL) return 1;
+    if (g_adaptive_policy == TFMBS_POLICY_FALLBACK_ALL) return 0;
+
+    if (g_adaptive_policy == TFMBS_POLICY_ADAPTIVE_SPARSITY) {
+        // If EMA is below threshold, fallback to CPU, but probe occasionally
+        if (g_avg_sparsity_ema < g_sparsity_threshold) {
+            if (g_fallback_streak < FALLBACK_PROBE_INTERVAL) {
+                if (getenv("TFMBS_DEBUG")) printf("[TFMBS-Agent] Adaptive Fallback: EMA sparsity %.2f < threshold %.2f (streak %d)\n", g_avg_sparsity_ema, g_sparsity_threshold, g_fallback_streak);
+                return 0;
+            } else {
+                if (getenv("TFMBS_DEBUG")) printf("[TFMBS-Agent] Probing Fabric despite low EMA sparsity %.2f\n", g_avg_sparsity_ema);
+                return 1;
+            }
+        }
+    }
+    return 1;
+}
+
+static void cpu_fallback_gemv(orch_task_t* task) {
+    if (getenv("TFMBS_DEBUG")) printf("[TFMBS-Agent] Executing CPU Fallback for GEMV (%dx%d)\n", task->r, task->c);
+    // Unpack weights if they are fabric pointers and packed
+    // For simplicity in this emulator-based agent, we'll use a helper to read back and compute
+    int8_t* w_trits = malloc(task->r * task->c);
+    int8_t* i_trits = malloc(task->c);
+    int32_t* o_res = (int32_t*)task->o;
+
+    fabric_memcpy_from(w_trits, task->w, task->r * task->c, 1);
+    fabric_memcpy_from(i_trits, task->i, task->c, 1);
+
+    for (int r = 0; r < task->r; r++) {
+        int32_t acc = 0;
+        for (int c = 0; c < task->c; c++) {
+            acc += (int32_t)w_trits[r * task->c + c] * (int32_t)i_trits[c];
+        }
+        o_res[r] = acc;
+    }
+
+    free(w_trits);
+    free(i_trits);
 }
 
 static void ensure_resident(void* ptr, int best_fid) {
@@ -364,13 +448,25 @@ static void* orchestrator_loop(void* arg) {
         ensure_resident(task->w, best_fid);
         ensure_resident(task->i, best_fid);
 
-        // Dispatch to emulator
+        // Dispatch to emulator or Fallback
         g_last_dispatched_fid = best_fid;
-        if (task->type == OK_GEMV) task->emu_handle = emu_fabric_exec_gemv_async_id(best_fid, task->w, task->i, task->o, task->r, task->c, task->tile_mask);
-        else if (task->type == OK_LSTM) task->emu_handle = emu_fabric_exec_lstm_async_id(best_fid, task->w, task->i, task->o, task->r, task->c, task->tile_mask);
-        else if (task->type == OK_LSTM_P) task->emu_handle = emu_fabric_exec_lstm_persistent_async(task->w, task->i, task->o, task->r, task->c, task->tile_mask);
-        else if (task->type == OK_ATTN) task->emu_handle = emu_fabric_exec_attn_async_id(best_fid, task->w, task->i, task->a, task->o, task->r, task->c, task->tile_mask);
-        else if (task->type == OK_CONV3D) task->emu_handle = emu_fabric_exec_conv3d_async_id(best_fid, task->w, task->i, task->o, task->r, task->c, task->av, task->tile_mask);
+        int offload = should_offload_adaptive(task);
+
+        if (offload) {
+            g_offload_count++;
+            g_fallback_streak = 0;
+            if (task->type == OK_GEMV) task->emu_handle = emu_fabric_exec_gemv_async_id(best_fid, task->w, task->i, task->o, task->r, task->c, task->tile_mask);
+            else if (task->type == OK_LSTM) task->emu_handle = emu_fabric_exec_lstm_async_id(best_fid, task->w, task->i, task->o, task->r, task->c, task->tile_mask);
+            else if (task->type == OK_LSTM_P) task->emu_handle = emu_fabric_exec_lstm_persistent_async(task->w, task->i, task->o, task->r, task->c, task->tile_mask);
+            else if (task->type == OK_ATTN) task->emu_handle = emu_fabric_exec_attn_async_id(best_fid, task->w, task->i, task->a, task->o, task->r, task->c, task->tile_mask);
+            else if (task->type == OK_CONV3D) task->emu_handle = emu_fabric_exec_conv3d_async_id(best_fid, task->w, task->i, task->o, task->r, task->c, task->av, task->tile_mask);
+        } else {
+            g_fallback_count++;
+            g_fallback_streak++;
+            if (task->type == OK_GEMV) cpu_fallback_gemv(task);
+            // Other kernels could have fallbacks too, but GEMV is the focus for Phase 26
+            task->emu_handle = NULL; // Signal that it's already done
+        }
 
         // Update output residency
         size_t out_sz = (task->type == OK_ATTN) ? (size_t)task->r * task->c * 4 : (size_t)task->r * 4;

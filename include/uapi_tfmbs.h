@@ -73,6 +73,9 @@ typedef struct {
     uint64_t broadcasts;
     uint64_t residency_hits;
     uint64_t residency_misses;
+    // Phase 26
+    uint64_t fallback_count;
+    uint64_t offload_count;
 } tfmbs_ioc_metrics_t;
 
 typedef struct {
@@ -80,6 +83,11 @@ typedef struct {
     uint32_t lanes_per_tile;
     uint64_t total_pool_size;
 } tfmbs_ioc_device_info_t;
+
+typedef struct {
+    uint64_t addr;
+    int is_resident; // OUT
+} tfmbs_ioc_residency_t;
 
 #define TFMBS_IOC_ALLOC        _IOWR(TFMBS_IOC_MAGIC, 0x01, tfmbs_ioc_alloc_t)
 #define TFMBS_IOC_FREE         _IOW(TFMBS_IOC_MAGIC, 0x02, tfmbs_ioc_free_t)
@@ -90,5 +98,8 @@ typedef struct {
 #define TFMBS_IOC_GET_METRICS  _IOR(TFMBS_IOC_MAGIC, 0x07, tfmbs_ioc_metrics_t)
 #define TFMBS_IOC_GET_INFO     _IOR(TFMBS_IOC_MAGIC, 0x08, tfmbs_ioc_device_info_t)
 #define TFMBS_IOC_SUBMIT       _IOW(TFMBS_IOC_MAGIC, 0x09, tfmbs_tfd_t)
+#define TFMBS_IOC_QUERY_RES    _IOWR(TFMBS_IOC_MAGIC, 0x0A, tfmbs_ioc_residency_t)
+#define TFMBS_IOC_PIN_MEM      _IOW(TFMBS_IOC_MAGIC, 0x0B, tfmbs_ioc_residency_t)
+#define TFMBS_IOC_UNPIN_MEM    _IOW(TFMBS_IOC_MAGIC, 0x0C, tfmbs_ioc_residency_t)
 
 #endif /* TFMBS_UAPI_H */
