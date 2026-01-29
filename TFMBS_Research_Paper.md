@@ -162,8 +162,13 @@ Synthesis for the XC7Z020 FPGA (Zynq-7000) confirms the area efficiency of the t
 
 ### 6. Discussion and Future Work
 
-#### 6.1 Trade-offs of Ternary Computing
-While TFMBS offers extreme efficiency, it relies on the availability of high-quality ternary-quantized models. While models like BitNet have shown great promise, the ecosystem for ternary training and fine-tuning is still maturing. Furthermore, the PT-5 format, while efficient for storage, requires dedicated hardware logic for real-time unpacking, which adds a small amount of latency to the first stage of the pipeline.
+#### 6.1 Trade-offs and Architectural Constraints
+
+**Unpack/Decode Latency:** The PT-5 format requires non-trivial hardware logic to unpack 5 trits from an 8-bit byte on-the-fly. In our current emulator model, this adds a latency penalty to the "Pre-fetch" stage. While this is easily hidden in high-sparsity regimes where compute is the bottleneck, in dense workloads, the throughput of the PT-5 unpacker units must be carefully balanced with the bus width to avoid becoming a primary bottleneck.
+
+**Accumulation Precision:** To support the deep accumulation required by modern transformer layers, each Ternary Lane in TFMBS utilizes a **32-bit internal accumulator**. This provides sufficient headroom to prevent overflow during large-scale GEMM operations before the results are scaled or passed through activation functions.
+
+**Model Ecosystem Readiness:** TFMBS's utility is tied to the availability of high-quality ternary models like BitNet b1.58. However, the ecosystem for ternary training and fine-tuning is still maturing. The architecture's sensitivity to imperfect quantization—where a drop in accuracy might force a fallback to higher-precision binary arithmetic—remains a critical area for investigation. Currently, TFMBS acts as a specialized co-processor, and systems must still provide a path for traditional binary execution for non-quantizable layers.
 
 #### 6.2 The "Fabric Illusion"
 The TFMBS software stack provides a "Fabric Illusion," where the application developer interacts with standard tensors while the underlying interposer handles the complexity of residency, packing, and orchestration. This abstraction is critical for adoption, as it allows existing Python/PyTorch-based workflows to target the fabric without manual memory management.
@@ -171,9 +176,10 @@ The TFMBS software stack provides a "Fabric Illusion," where the application dev
 #### 6.3 Future Research Directions
 We identify several promising avenues for future work:
 1. **Native Ternary SRAM:** Current hardware uses standard binary SRAM to store trits. Designing native ternary memory cells could further reduce power and increase density.
-2. **Compiler IR Integration:** Integrating TFMBS as a target for compilers like MLIR would enable more aggressive operator fusion and graph-level optimizations.
-3. **Multi-Node Scaling:** Extending the Phase 21 orchestrator to manage fabrics across a network (e.g., via RDMA) would allow for the execution of massive models across a cluster of ternary accelerators.
-4. **Dynamic Semantic Scheduling:** Using real-time telemetry to adjust the ternary precision dynamically based on the sensitivity of specific model layers.
+2. **ASIC Implementation and Performance Scaling:** While this study focuses on FPGA-based emulation, a dedicated ASIC implementation of TFMBS is projected to be highly competitive. Future work will involve a detailed area/power comparison against optimized INT8 TPUs and modern binary-weighted NPUs.
+3. **Compiler IR Integration:** Integrating TFMBS as a target for compilers like MLIR would enable more aggressive operator fusion and graph-level optimizations.
+4. **RDMA-based Multi-Node Scaling:** Extending the Phase 21 orchestrator to manage fabrics across a network via RDMA would allow for the execution of massive (100B+ parameter) ternary models across a disaggregated rack of ternary co-processors.
+5. **Dynamic Semantic Scheduling:** Using real-time telemetry to adjust the ternary precision dynamically based on the sensitivity of specific model layers.
 
 ### 7. Conclusion
 
