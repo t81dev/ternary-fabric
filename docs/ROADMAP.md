@@ -42,16 +42,6 @@ Fabric Instance (Emulator / Hardware)
 - Automatic migration and packing (RAW → PT-5) of resident weights.
 - Deliverable: Residency pool management in `libtfmbs_device.so`.
 
-### Phase 21 — Predictive Multi-Fabric Orchestration ✅
-Elevating the fabric to a proactive, system-level efficiency management layer.
-*   **Deliverables:**
-    *   **Global Orchestrator:** Dynamic task distribution across multiple isolated fabric instances.
-    *   **Predictive Scheduler:** Lookahead mechanism (Window=5) for hot-state anticipation and pre-loading.
-    *   **Cross-Fabric Fusion:** Automated locality optimization for dependent kernel sequences.
-    *   **Adaptive Multi-Stage Pipeline:** Three-stage asynchronous execution (Pre-fetch -> Execute -> Commit) with dynamic depth.
-
----
-
 ### Phase 9: Integrated Telemetry ✅
 - Real-time visibility into sparsity, residency, and cycle counts.
 - Deliverable: Terminal dashboard and telemetry logging.
@@ -99,6 +89,78 @@ Elevating the fabric to a proactive, system-level efficiency management layer.
   - **Predictive Scheduler:** 5-kernel lookahead mechanism.
   - **Cross-Fabric Fusion:** Dependency-aware locality optimization.
   - **Three-Stage Pipeline:** Pre-fetch -> Execute -> Commit.
+
+---
+
+## 🚀 Upcoming Phases & Strategic Tracks
+
+The roadmap is now organized into parallel tracks to accelerate hardware sovereignty, ecosystem integration, and large-scale deployment.
+
+### 🛤️ Track A: Hardware Sovereignty (FPGA to ASIC)
+*Priority: Highest immediate | Timeline: 0–12 months*
+
+**Phase 22: Physical FPGA Synthesis & Hardware Verification**
+Moving beyond the "Mock" driver (Phase 10) to real bitstream execution on Xilinx Zynq-7000 (XC7Z020/XC7Z045) hardware.
+- **Deliverables:**
+  - **Validated RTL:** Synthesizable Verilog/SystemVerilog for TFMBS tiles and lanes.
+  - **Hardware-in-the-Loop (HIL):** Integration with physical IOCTLs for kernel dispatch.
+  - **Silicon Benchmarks:** Real-world measurements of power, thermal, and cycle counts on FPGA.
+
+**Phase 24: Native Ternary SRAM & Custom Logic Gating**
+Optimizing the physical substrate for ternary density by moving away from standard binary SRAM blocks.
+- **Deliverables:**
+  - **Ternary SRAM Models:** SPICE/Verilog models for optimized 1.58-bit storage cells.
+  - **Advanced Gating:** Fine-grained clock and power gating for Zero-Skip at the gate level.
+  - **Refined RTL:** Optimized ternary arithmetic logic units (TALU) for high-frequency targets.
+
+**Phase 27: ASIC Tape-out Readiness & High-Density Fabric**
+Finalizing the architecture for physical fabrication (e.g., 7nm/12nm nodes).
+- **Deliverables:**
+  - **GDSII-Ready RTL:** Hardened RTL package for physical synthesis handoff.
+  - **Power/Area Maps:** Comprehensive modeling for high-density (1024+ lane) configurations.
+  - **ASIC Efficiency Proof:** Projected >500 GOPS/W performance metrics.
+
+---
+
+### 🛤️ Track B: Compiler & Ecosystem Integration
+*Priority: High leverage for adoption | Timeline: 3–9 months*
+
+**Phase 23: TFMBS-MLIR Dialect & Compiler Integration**
+Establishing TFMBS as a first-class citizen in the MLIR/LLVM ecosystem to enable transparent model portability.
+- **Deliverables:**
+  - **MLIR Dialect:** Definition of ternary-native ops and attributes in MLIR.
+  - **Lowering Passes:** Automated conversion from Torch-MLIR and ONNX to TFMBS kernels.
+  - **Operator Fusion:** Graph-level optimizations for cross-kernel fusion and buffer reuse.
+
+**Phase 26: Dynamic Semantic Scheduling & Precision Adaptation**
+Using real-time telemetry to adjust execution precision and semantic depth based on model layer sensitivity.
+- **Deliverables:**
+  - **Adaptive Runtime Agent:** Logic to dynamically switch between ternary and binary (fallback) paths.
+  - **Sensitivity Telemetry:** Metrics to identify "hot" vs. "sensitive" layers during inference.
+  - **Hybrid Execution Policies:** Optimized heuristics for balancing accuracy and efficiency.
+
+---
+
+### 🛤️ Track C: Extreme Scale & Distributed Orchestration
+*Priority: Medium-term / Data-center focus | Timeline: 6–18 months*
+
+**Phase 25: RDMA-based Multi-Node Scaling**
+Extending Phase 21 orchestration to disaggregated clusters, targeting models that exceed single-device memory.
+- **Deliverables:**
+  - **Distributed Orchestrator:** RDMA-aware task distribution across multiple networked hosts.
+  - **Global Residency Map:** Tracking PT-5 weight residency across a distributed fabric.
+  - **100B+ Model Support:** End-to-end inference for massive models (e.g., BitNet-100B) via networked fabrics.
+
+---
+
+## 🎯 Major Strategic Milestones
+
+- **Milestone 1: The Silicon Reality (Q3 2026)**
+  End-to-end ternary inference on physical FPGA with verified >50x efficiency vs. CPU baseline for 7B-scale models.
+- **Milestone 2: The Data-Center Fabric (Q4 2026)**
+  Seamless distributed execution of 70B+ models across multi-node TFMBS clusters.
+- **Milestone 3: ASIC-Ready Architectural Handoff (2027)**
+  Finalized architectural package for physical fabrication, targeting >500 GOPS/W.
 
 ---
 
