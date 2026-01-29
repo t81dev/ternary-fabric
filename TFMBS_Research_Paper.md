@@ -221,15 +221,15 @@ Each TFMBS fabric instance supports a memory pool of **128 MB**. Utilizing the P
 To isolate the impact of our architectural optimizations, we conducted an ablation study on the 4-tile fabric. Disabling the **Zero-Skip** mechanism collapses effective throughput back to the dense peak (≈1.0× over baseline), eliminating sparsity-driven gains and confirming that our gating is the primary driver of performance in sparse regimes. Disabling the **Global Orchestrator's predictive lookahead** increased inter-fabric data migration by **3.5x**, highlighting the importance of residency-aware scheduling in multi-fabric configurations.
 
 ```text
-[Figure 2: Fabric-Normalized Efficiency vs. Data Sparsity (Line Chart).
-X-axis: Sparsity (0% to 90%). Y-axis: Normalized GOPS/W (baseline 1x at 0%).
-The curve demonstrates near-linear scaling as Zero-Skip suppresses compute
-and memory energy, reaching an approaching ~4-5x improvement at 90%
+[Figure 2: Fabric-Normalized Efficiency vs. Data Sparsity (Line Chart). 
+X-axis: Sparsity (0% to 90%). Y-axis: Normalized GOPS/W (baseline 1x at 0%). 
+The curve demonstrates near-linear scaling as Zero-Skip suppresses compute 
+and memory energy, reaching an approaching ~4-5x improvement at 90% 
 sparsity. Lane utilization rises from 0.34 (dense) to 0.89 (90% sparse).]
 
-[Figure 3: Inter-Fabric Migration Volume (Bar Chart). Y-axis: Total PT-5
-Data Movement (normalized). Comparison between static round-robin dispatch
-and Phase 21 predictive lookahead. The orchestrator reduces migration
+[Figure 3: Inter-Fabric Migration Volume (Bar Chart). Y-axis: Total PT-5 
+Data Movement (normalized). Comparison between static round-robin dispatch 
+and Phase 21 predictive lookahead. The orchestrator reduces migration 
 overhead by 3.5x by maintaining buffer locality across kernels.]
 ```
 
