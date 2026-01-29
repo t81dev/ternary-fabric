@@ -210,16 +210,28 @@ Table 3 compares TFMBS against recent ternary accelerators and CPU-based baselin
 | **Sparsity Opt.** | Soft (AVX/NEON) | Static Gating | Bit-Serial | **Dynamic Zero-Skip** |
 | **Orchestration** | Single-Threaded | Static | Static | **Predictive Lookahead** |
 | **Efficiency (OP/W)** | ~1.5 GOPS/W | ~18.5 GOPS/W | ~14.2 GOPS/W | **~25.2 GOPS/W (Est.)** |
-| **Prefill TTFT** | High (ms) | Medium | Medium | **Low (Async Fusion)** |
-| **Tokens/s/W** | < 5 | ~45 | ~35 | **~65 (Projected)** |
+| **Prefill TTFT (0.7B)**| >100 ms | ~15 ms | ~20 ms | **~8 ms (Proj.)** |
+| **Tokens/s/W (0.7B)** | < 5 | ~45 | ~35 | **~65 (Proj.)** |
+| **Tokens/s/W (3.0B)** | < 2 | ~15 | ~12 | **~22 (Proj.)** |
 
-*Table 3: Comparison with existing ternary execution methods. Metrics estimated for BitNet-0.7B equivalent kernels at ~50% sparsity. Tokens/s/W is estimated assuming BitNet-0.7B style GEMV dominance and excludes host-side softmax and non-ternary layers.*
+*Table 3: Comparison with existing ternary execution methods. Metrics estimated for BitNet-0.7B/3B equivalent kernels at ~50% sparsity. Tokens/s/W excludes host-side softmax and non-ternary layers.*
 
 #### 5.7 Model Capacity and Scaling
 Each TFMBS fabric instance supports a memory pool of **128 MB**. Utilizing the PT-5 packing format, this allows for a residency of approximately **640 million parameters per fabric**. In a standard 4-fabric orchestrated system, TFMBS can maintain over **2.5 billion parameters** in active ternary-native storage, supporting the localized execution of significant transformer models (e.g., BitNet-3B) without requiring frequent host-side repacking.
 
 #### 5.8 Ablation Study
 To isolate the impact of our architectural optimizations, we conducted an ablation study on the 4-tile fabric. Disabling the **Zero-Skip** mechanism collapses effective throughput back to the dense peak (≈1.0× over baseline), eliminating sparsity-driven gains and confirming that our gating is the primary driver of performance in sparse regimes. Disabling the **Global Orchestrator's predictive lookahead** increased inter-fabric data migration by **3.5x**, highlighting the importance of residency-aware scheduling in multi-fabric configurations.
+
+```text
+[Figure 2: Economic Efficiency vs. Data Sparsity. The curve demonstrates a
+near-linear scaling of GOPS/W as the Zero-Skip mechanism suppresses compute
+and memory energy for null trits, reaching a 4.5x improvement at 90% sparsity.]
+
+[Figure 3: Inter-Fabric Migration Volume (Ablation). Comparison of total
+PT-5 data movement between static round-robin dispatch and Phase 21
+predictive lookahead. The orchestrator reduces migration overhead by 3.5x
+by maintaining buffer locality.]
+```
 
 #### 5.9 Threats to Validity
 Because performance is derived from a calibrated emulator rather than full ASIC silicon, absolute energy and throughput may differ under physical implementation. Additionally, BitNet-style sparsity assumptions may not generalize to all ternary-quantized models. Finally, orchestration benefits depend on workload regularity; highly irregular graphs may reduce lookahead effectiveness.
