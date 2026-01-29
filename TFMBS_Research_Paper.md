@@ -7,7 +7,7 @@ Independent Systems Architecture Lab (ISAL)
 ---
 
 ### Abstract
-As large-scale artificial intelligence models continue to push the limits of traditional binary computing, the "memory wall" and the energy costs of multiplication-heavy workloads have become critical bottlenecks. This paper presents **TFMBS (Ternary Fabric / Multi-Bit System)**, a novel co-processor architecture designed for the native execution of balanced-ternary semantics ({-1, 0, 1}). By replacing energy-intensive binary multipliers with gated sign-flipping logic and introducing the **PT-5** high-density packing format, TFMBS achieves significant throughput and power efficiency gains. Furthermore, we introduce the **Phase 21 Predictive Multi-Fabric Orchestrator**, which utilizes a 5-kernel lookahead window to optimize task dispatching, residency-aware scheduling, and cross-fabric kernel fusion. Experimental results on a cycle-accurate emulator demonstrate that a 4-tile TFMBS configuration achieves a peak throughput of 30 GOPS at 250 MHz, with effective performance scaling significantly in sparse regimes via our **Zero-Skip** optimization. TFMBS provides a scalable and efficient semantic execution substrate for the next generation of quantized AI systems.
+As large-scale artificial intelligence models continue to push the limits of traditional binary computing, the "memory wall" and the energy costs of multiplication-heavy workloads have become critical bottlenecks. This paper presents **TFMBS (Ternary Fabric / Multi-Bit System)**, a novel co-processor architecture designed for the native execution of balanced-ternary semantics ({-1, 0, 1}). By replacing energy-intensive binary multipliers with gated sign-flipping logic and introducing the **PT-5** high-density packing format, TFMBS achieves significant throughput and power efficiency gains. Furthermore, we introduce the **Phase 21 Predictive Multi-Fabric Orchestrator**, which utilizes a 5-kernel lookahead window to optimize task dispatching, residency-aware scheduling, and cross-fabric kernel fusion. Experimental results on a **cycle-accurate, FPGA-calibrated emulator** demonstrate that a 4-tile TFMBS configuration achieves a **modeled peak throughput of 30 GOPS at 250 MHz**, with effective performance scaling significantly in sparse regimes via our **Zero-Skip** optimization. TFMBS provides a scalable and efficient semantic execution substrate for the next generation of quantized AI systems.
 
 ---
 
@@ -25,7 +25,7 @@ Native ternary computing offers a path toward extreme efficiency, but it faces t
 3. **Orchestration Scalability:** Efficiently distributing ternary workloads across multiple parallel fabrics while managing data residency and inter-fabric movement is non-trivial.
 
 #### 1.3 Contributions
-In this paper, we propose the **Ternary Fabric / Multi-Bit System (TFMBS)** to address these challenges. Our contributions include:
+In this paper, we propose the **Ternary Fabric / Multi-Bit System (TFMBS)** to address these challenges. Throughout this paper, **one operation (OP) denotes a single ternary accumulate ($s(w,x)$)** rather than a floating-point FLOP. Our contributions include:
 - **Ternary-Native Architecture:** A hardware fabric composed of parallel tiles and "Ternary Lanes" that execute balanced-ternary arithmetic using gated logic instead of multipliers.
 - **PT-5 Packing Format:** A high-density encoding scheme that packs 5 trits into a single 8-bit byte, achieving 95.1% storage efficiency and maximizing bus utilization.
 - **Zero-Skip Optimization:** A hardware-level optimization that suppresses clocking and memory access for zero-valued operands, exploiting the natural sparsity of ternary models.
@@ -100,10 +100,10 @@ The theoretical information density is:
 \[
 \frac{\log_2(3^5)}{8} \approx 0.99
 \]
-However, practical PT-5 encoding uses only values \((0 \dots 242)\), yielding a physical utilization of \((242/256 \approx 94.5\%)\). After accounting for alignment and hardware unpacker constraints, the implemented TFMBS fabric achieves **95.1% effective bandwidth utilization**.
+However, practical PT-5 encoding uses only values \((0 \dots 242)\), yielding a physical utilization of \((242/256 \approx 94.5\%)\). After accounting for alignment and hardware unpacker constraints, the implemented TFMBS fabric **sustains ≈95% effective bandwidth utilization** in modeled transfers.
 
 #### 3.3 Zero-Skip Optimization
-The TFMBS hardware monitors the $w=0$ and $x=0$ conditions. When either is true, the Lane's clock is gated, and the accumulation is bypassed. This "Zero-Skip" mechanism is the primary driver of **Economic Efficiency**, as it directly reduces the cycle count for sparse workloads.
+The TFMBS hardware monitors the $w=0$ and $x=0$ conditions. When either is true, the Lane's clock is gated, and the accumulation is bypassed. Formally, when $w=0 \lor x=0$, the lane suppresses issue and memory fetch, reducing both dynamic toggle energy and effective issued operations. This "Zero-Skip" mechanism is the primary driver of **Economic Efficiency**, as it directly reduces the cycle count for sparse workloads.
 
 #### 3.4 System Organization
 ```text
@@ -137,7 +137,7 @@ Phase 21 of the TFMBS project introduces a sophisticated orchestration layer tha
 \[
 \min_k (L_c(k) + \alpha L_m(k) + \beta R(k))
 \]
-where \(\alpha\) and \(\beta\) are empirically tuned coefficients. The 5-kernel lookahead window provides a sufficient horizon to amortize prefetch costs without introducing global scheduling stalls. In our emulator, \(L_m\) models PT-5 DMA transfers at 8 GB/s equivalent bandwidth with a fixed per-kernel dispatch overhead of 120 cycles.
+where \(\alpha\) and \(\beta\) are empirically tuned coefficients. The 5-kernel lookahead window provides a sufficient horizon to amortize prefetch costs without introducing global scheduling stalls. In practice, \(\alpha\) prioritizes locality (typically 1.5–2× weight over compute), while \(\beta\) limits fabric memory pressure to avoid thrashing under multi-tenant workloads. In our emulator, \(L_m\) models PT-5 DMA transfers at 8 GB/s equivalent bandwidth with a fixed per-kernel dispatch overhead of 120 cycles.
 
 #### 4.1 Global Orchestrator and Residency Map
 The orchestrator maintains a **Global Residency Map**, tracking which fabric instance holds the PT-5 representation of specific memory buffers. This allows the scheduler to prioritize "Locality-First" dispatching, sending tasks to fabrics where the large weight matrices are already resident.
@@ -165,12 +165,10 @@ Experimental parameters:
 - **Default Config:** 4 Tiles (60 lanes)
 - **Workloads:** T-GEMM, T-LSTM, T-Attention, and a mock Llama-style inference loop (8 GEMV batches).
 
-We define one operation (OP) as a single ternary accumulate ($s(w,x)$) into a lane accumulator. Thus GOPS reflects lane-level ternary MAC-equivalents rather than binary floating-point FLOPs.
-
 #### 5.2 Performance Results
 Table 1 summarizes the peak and effective throughput across different configurations.
 
-| Configuration | Lanes | GOPS (Peak) | GOPS (Effective @ 50% Sparsity) | Zero-Skip Cycle Reduction |
+| Configuration | Lanes | GOPS (Peak) | GOPS (Modeled @ 50% Sparsity) | Zero-Skip Cycle Reduction |
 | :--- | :--- | :--- | :--- | :--- |
 | **Single Tile** | 15 | 7.5 | ~15.0 | 65% |
 | **Aggregated (4 Tiles)** | 60 | 30.0 | ~60.0 | 66% |
@@ -198,10 +196,10 @@ Synthesis for the XC7Z020 FPGA (Zynq-7000) confirms the area efficiency of the t
 *Table 2: Synthesis results showing zero DSP utilization.*
 
 #### 5.5 Power and Efficiency Benchmarks
-On the XC7Z020 FPGA, the 4-tile TFMBS fabric is estimated to consume **~2.4W** of dynamic power at 250 MHz. This efficiency is driven by the Zero-Skip clock gating and the absence of high-toggle binary multipliers. TFMBS provides an **estimated 12.5x improvement in energy-per-inference** for ternary-quantized GEMM kernels relative to an ARM NEON (A53) baseline on the same SoC, assuming equivalent sparsity and memory locality.
+On the XC7Z020 FPGA, the 4-tile TFMBS fabric is estimated to consume **~2.4W** of dynamic power at 250 MHz for ternary GEMM workloads. This efficiency is driven by the Zero-Skip clock gating and the absence of high-toggle binary multipliers. TFMBS provides an **estimated 12.5x improvement in energy-per-inference for ternary GEMM workloads** relative to an ARM NEON (A53) baseline on the same SoC, assuming equivalent sparsity and memory locality.
 
 #### 5.6 Comparative Analysis
-Table 3 compares TFMBS against recent ternary accelerators and CPU-based baselines.
+Table 3 compares TFMBS against recent ternary accelerators and CPU-based baselines. These projections focus on ternary-dominant kernels and exclude host-side scheduling, softmax, and embedding layers.
 
 | Metric | bitnet.cpp (CPU) | TeLLMe (FPGA) | TerEffic (FPGA) | **TFMBS (Phase 21)** |
 | :--- | :--- | :--- | :--- | :--- |
@@ -237,7 +235,7 @@ by maintaining buffer locality.]
 Because performance is derived from a calibrated emulator rather than full ASIC silicon, absolute energy and throughput may differ under physical implementation. Additionally, BitNet-style sparsity assumptions may not generalize to all ternary-quantized models. Finally, orchestration benefits depend on workload regularity; highly irregular graphs may reduce lookahead effectiveness.
 
 #### 5.10 Efficiency Curve and Projections
-The Zero-Skip optimization creates a direct linear relationship between data sparsity and economic efficiency. In modeled scenarios, as sparsity increases from 0% to 90%, the **Efficiency (GOPS/W)** curve exhibits a **4.5x improvement**, as the hardware suppresses both compute and memory-read energy for null operands. Microbenchmarks show near-linear scaling of lane utilization with sparsity, with utilization rising from 0.34 at dense inputs to 0.89 at 90% sparsity due to Zero-Skip gating. For future high-density ASIC deployments (e.g., 7nm), we project an area efficiency of **~12 TOPS/mm²** and an energy efficiency exceeding **100 GOPS/W**, positioning TFMBS as a leading substrate for post-binary edge AI.
+The Zero-Skip optimization creates a direct linear relationship between data sparsity and economic efficiency. In modeled scenarios, as sparsity increases from 0% to 90%, the **Efficiency (GOPS/W)** curve exhibits an **approaching ~4–5× improvement**, as the hardware suppresses both compute and memory-read energy for null operands. Microbenchmarks show near-linear scaling of lane utilization with sparsity, with utilization rising from 0.34 at dense inputs to 0.89 at 90% sparsity due to Zero-Skip gating. For future high-density ASIC deployments (e.g., 7nm), we project an area efficiency of **~12 TOPS/mm²** and an energy efficiency exceeding **100 GOPS/W**, positioning TFMBS as a leading substrate for post-binary edge AI.
 
 ### 6. Discussion and Future Work
 
@@ -249,7 +247,7 @@ The Zero-Skip optimization creates a direct linear relationship between data spa
 
 **Model Ecosystem Readiness:** TFMBS's utility is tied to the availability of high-quality ternary models like BitNet b1.58. However, the ecosystem for ternary training and fine-tuning is still maturing. Currently, TFMBS acts as a specialized co-processor, and systems must still provide a path for traditional binary execution for non-quantizable layers.
 
-**Hybrid Fallback and Dynamic Switching:** To address non-quantizable layers or imperfectly quantized regions, the TFMBS interposer implements a **Hybrid Fallback** mechanism. The interposer uses `mprotect` and `SIGSEGV` traps to monitor memory access. If a kernel is dispatched that targets a memory region not currently resident in the PT-5 fabric (or if the operation is unsupported), the interposer dynamically redirects the execution to the host CPU's standard binary SIMD units (e.g., ARM NEON). This switching is handled transparently to the application, maintaining data coherence through the Global Orchestrator's residency map.
+**Hybrid Fallback and Dynamic Switching:** To address non-quantizable layers or imperfectly quantized regions, the TFMBS interposer implements a **Hybrid Fallback** mechanism. The interposer uses `mprotect` and `SIGSEGV` traps to monitor memory access. If a kernel is dispatched that targets a memory region not currently resident in the PT-5 fabric (or if the operation is unsupported), the interposer dynamically redirects the execution to the host CPU's standard binary SIMD units (e.g., ARM NEON). Trap-based redirection is amortized at kernel granularity rather than per-element, ensuring that control transfer overhead does not dominate fine-grained execution. This switching is handled transparently to the application, maintaining data coherence through the Global Orchestrator's residency map.
 
 **Limitations:** TFMBS currently assumes inference-only execution and does not accelerate backpropagation. Additionally, ternary quantization can introduce accuracy sensitivity in attention-heavy layers, potentially necessitating more frequent hybrid execution fallbacks. Finally, the PT-5 unpack logic introduces control complexity that may limit the maximum achievable clock frequency in very high-density fabric configurations.
 
