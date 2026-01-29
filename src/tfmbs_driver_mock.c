@@ -6,6 +6,11 @@
 #include "fabric_emulator.h"
 #include "../include/uapi_tfmbs.h"
 
+#define DMA_RING_SIZE 256
+static struct tfmbs_dma_desc g_dma_ring[DMA_RING_SIZE];
+static uint32_t g_dma_head = 0; // Producer index (User)
+static uint32_t g_dma_tail = 0; // Consumer index (Driver)
+
 /**
  * @brief Mock implementation of a TFMBS kernel driver.
  * In a real system, this would be a Linux kernel module.
@@ -102,6 +107,32 @@ int tfmbs_dev_ioctl(int fd, unsigned long request, void* arg) {
         }
         case TFMBS_IOC_UNPIN_MEM: {
             printf("[TFMBS-Driver] Unpinning memory at 0x%lx\n", ((tfmbs_ioc_residency_t*)arg)->addr);
+            return 0;
+        }
+        case TFMBS_IOC_SUBMIT_DMA: {
+            tfmbs_ioc_submit_dma_t* s = (tfmbs_ioc_submit_dma_t*)arg;
+            for (uint32_t i = 0; i < s->count; i++) {
+                uint32_t next_head = (g_dma_head + 1) % DMA_RING_SIZE;
+                if (next_head == g_dma_tail) {
+                    return -EBUSY; // Ring full
+                }
+                g_dma_ring[g_dma_head] = s->descs[i];
+
+                // Simulate Driver/Hardware processing the descriptor
+                struct tfmbs_dma_desc* d = &g_dma_ring[g_dma_head];
+                if (d->flags & 0x1) { // Host -> Device
+                    emu_fabric_memcpy_to((void*)d->dst_addr, (void*)d->src_addr, d->len, 0);
+                } else if (d->flags & 0x2) { // Device -> Host
+                    emu_fabric_memcpy_from((void*)d->dst_addr, (void*)d->src_addr, d->len, 0);
+                }
+
+                if (d->flags & 0x4) { // Interrupt on complete
+                    printf("[TFMBS-Driver] DMA IRQ: Completed descriptor at index %d\n", g_dma_head);
+                }
+
+                g_dma_head = next_head;
+                g_dma_tail = (g_dma_tail + 1) % DMA_RING_SIZE; // Immediately "consume" for mock
+            }
             return 0;
         }
         default:

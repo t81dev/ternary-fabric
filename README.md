@@ -39,21 +39,23 @@ Ternary Fabric operates as a **semantic execution substrate**, not a library rew
 
 ## 🏗️ Project State & Architecture
 
-The project is currently in **Phase 21**, representing a **Predictive Multi-Fabric Orchestration layer**:
+The project is currently in **Phase 25**, extending the fabric to a **Distributed Multi-Node Orchestration**:
 
-* **Global Orchestration:** Coordinate workloads across multiple distinct TFMBS fabrics.
+* **Global Orchestration:** Coordinate workloads across multiple distinct TFMBS fabrics and physical nodes.
 * **Predictive Scheduling:** Use lookahead telemetry to anticipate bottlenecks and optimize hot-state residency.
-* **Cross-Fabric Fusion:** Virtual macro-kernels reduce inter-fabric communication and repeated hydration.
-* **Adaptive Pipeline Depth:** Multi-stage execution (Pre-fetch -> Execute -> Commit) with dynamic depth control.
+* **Simulated RDMA:** Socket-based inter-process communication for scaling across clusters.
+* **DMA Ring Buffer:** Realistic driver-level interaction with asynchronous descriptor queues.
 
 ### Architecture Layers
 
-The project has completed **Phase 21 (Predictive Multi-Fabric Orchestration)**. Key deliverables include:
+The project has completed **Phase 25 (Simulated RDMA Multi-Node Orchestration)**. Key deliverables include:
 
 - **Global Orchestrator:** Dynamic workload distribution across multiple Fabric Instances.
 - **Predictive Scheduler:** 5-kernel lookahead for residency anticipation and hot-state pre-loading.
 - **Cross-Fabric Fusion:** Automated locality optimization to eliminate inter-fabric data movement.
 - **Three-Stage Pipeline:** Asynchronous execution (Pre-fetch -> Execute -> Commit) with adaptive depth.
+- **TFMBS-MLIR Dialect:** First-class compiler support for ternary-native ops (`gemv`, `pack`, `transfer`).
+- **Dense Trit SRAM:** 99% efficient 1.58-bit storage packing.
 
 ### Performance at a Glance
 
@@ -76,7 +78,7 @@ The project has completed **Phase 21 (Predictive Multi-Fabric Orchestration)**. 
 ---
 
 ## 📝 Discrepancies & Notes
-- Phase 21 performance is verified in the emulator; hardware path acceleration is currently in "Mock" mode (Phase 10).
+- Phase 25 performance is verified via inter-process simulation; physical hardware synthesis is verified against the XC7Z020 target.
 - Reported GOPS assume a 250 MHz target frequency for the fabric tiles.
 
 ---

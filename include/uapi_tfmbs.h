@@ -89,6 +89,22 @@ typedef struct {
     int is_resident; // OUT
 } tfmbs_ioc_residency_t;
 
+/**
+ * @brief DMA Descriptor for Phase 22.
+ */
+struct tfmbs_dma_desc {
+    uint64_t src_addr;
+    uint64_t dst_addr;
+    uint32_t len;
+    uint32_t flags;     // bit 0: host->device, bit 1: device->host, bit 2: interrupt on complete
+    uint64_t next;      // for chaining or ring indexing
+};
+
+typedef struct {
+    struct tfmbs_dma_desc* descs;
+    uint32_t count;
+} tfmbs_ioc_submit_dma_t;
+
 #define TFMBS_IOC_ALLOC        _IOWR(TFMBS_IOC_MAGIC, 0x01, tfmbs_ioc_alloc_t)
 #define TFMBS_IOC_FREE         _IOW(TFMBS_IOC_MAGIC, 0x02, tfmbs_ioc_free_t)
 #define TFMBS_IOC_MEMCPY_TO    _IOW(TFMBS_IOC_MAGIC, 0x03, tfmbs_ioc_memcpy_to_t)
@@ -101,5 +117,6 @@ typedef struct {
 #define TFMBS_IOC_QUERY_RES    _IOWR(TFMBS_IOC_MAGIC, 0x0A, tfmbs_ioc_residency_t)
 #define TFMBS_IOC_PIN_MEM      _IOW(TFMBS_IOC_MAGIC, 0x0B, tfmbs_ioc_residency_t)
 #define TFMBS_IOC_UNPIN_MEM    _IOW(TFMBS_IOC_MAGIC, 0x0C, tfmbs_ioc_residency_t)
+#define TFMBS_IOC_SUBMIT_DMA   _IOW(TFMBS_IOC_MAGIC, 0x0D, tfmbs_ioc_submit_dma_t)
 
 #endif /* TFMBS_UAPI_H */
