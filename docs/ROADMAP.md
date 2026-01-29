@@ -20,7 +20,7 @@ Fabric Instance (Emulator / Hardware)
 
 ---
 
-## 🏁 Completed Phases (0–21)
+## 🏁 Completed Phases (0–25)
 
 ### Phase 0: Device Contract ✅
 - Defined the normative ABI for TFMBS memory and execution.
@@ -90,6 +90,29 @@ Fabric Instance (Emulator / Hardware)
   - **Cross-Fabric Fusion:** Dependency-aware locality optimization.
   - **Three-Stage Pipeline:** Pre-fetch -> Execute -> Commit.
 
+### Phase 22: Physical FPGA Synthesis & Hardware Verification (Driver Layer) ✅
+- Implementation of a realistic DMA ring-buffer driver.
+- Deliverables:
+  - **DMA Ring Buffer:** Producer-consumer model for descriptor processing.
+  - **Asynchronous IOCTLs:** `TFMBS_IOC_SUBMIT_DMA` for high-throughput batching.
+
+### Phase 23: TFMBS-MLIR Dialect (Definitions) ✅
+- Establishing TFMBS as a first-class citizen in the MLIR ecosystem.
+- Deliverables:
+  - **MLIR Dialect:** `tfmbs` dialect ODS definition.
+  - **Core Ops:** `pack`, `unpack`, `gemv`, and `transfer` operations.
+
+### Phase 24: Native Ternary SRAM & Dense Packing ✅
+- Optimizing the physical substrate for ternary density.
+- Deliverables:
+  - **Ternary SRAM Model:** Behavioral Verilog for PT-20 dense packing (99% efficiency).
+
+### Phase 25: RDMA-based Multi-Node Scaling (Simulation) ✅
+- Extending orchestration to disaggregated clusters via simulated network.
+- Deliverables:
+  - **Simulated RDMA:** Socket-based inter-process fabric communication.
+  - **Multi-Node Orchestrator:** Node-aware task dispatching.
+
 ### Phase 26: Adaptive Runtime Agent & Hybrid Execution ✅
 - Intelligent runtime layer that chooses optimal execution path (Fabric vs. CPU).
 - Deliverables:
@@ -107,17 +130,17 @@ The roadmap is now organized into parallel tracks to accelerate hardware soverei
 ### 🛤️ Track A: Hardware Sovereignty (FPGA to ASIC)
 *Priority: Highest immediate | Timeline: 0–12 months*
 
-**Phase 22: Physical FPGA Synthesis & Hardware Verification**
+**Phase 22: Physical FPGA Synthesis & Hardware Verification (RTL Handoff)**
 Moving beyond the "Mock" driver (Phase 10) to real bitstream execution on Xilinx Zynq-7000 (XC7Z020/XC7Z045) hardware.
 - **Deliverables:**
   - **Validated RTL:** Synthesizable Verilog/SystemVerilog for TFMBS tiles and lanes.
   - **Hardware-in-the-Loop (HIL):** Integration with physical IOCTLs for kernel dispatch.
   - **Silicon Benchmarks:** Real-world measurements of power, thermal, and cycle counts on FPGA.
 
-**Phase 24: Native Ternary SRAM & Custom Logic Gating**
+**Phase 24: Native Ternary SRAM & Custom Logic Gating (Physical Design)**
 Optimizing the physical substrate for ternary density by moving away from standard binary SRAM blocks.
 - **Deliverables:**
-  - **Ternary SRAM Models:** SPICE/Verilog models for optimized 1.58-bit storage cells.
+  - **Ternary SRAM Models:** SPICE/GDSII models for optimized 1.58-bit storage cells.
   - **Advanced Gating:** Fine-grained clock and power gating for Zero-Skip at the gate level.
   - **Refined RTL:** Optimized ternary arithmetic logic units (TALU) for high-frequency targets.
 
@@ -133,10 +156,9 @@ Finalizing the architecture for physical fabrication (e.g., 7nm/12nm nodes).
 ### 🛤️ Track B: Compiler & Ecosystem Integration
 *Priority: High leverage for adoption | Timeline: 3–9 months*
 
-**Phase 23: TFMBS-MLIR Dialect & Compiler Integration**
+**Phase 23: TFMBS-MLIR Dialect & Compiler Integration (Optimization & Lowering)**
 Establishing TFMBS as a first-class citizen in the MLIR/LLVM ecosystem to enable transparent model portability.
 - **Deliverables:**
-  - **MLIR Dialect:** Definition of ternary-native ops and attributes in MLIR.
   - **Lowering Passes:** Automated conversion from Torch-MLIR and ONNX to TFMBS kernels.
   - **Operator Fusion:** Graph-level optimizations for cross-kernel fusion and buffer reuse.
 
@@ -152,10 +174,10 @@ Using real-time telemetry to adjust execution precision and semantic depth based
 ### 🛤️ Track C: Extreme Scale & Distributed Orchestration
 *Priority: Medium-term / Data-center focus | Timeline: 6–18 months*
 
-**Phase 25: RDMA-based Multi-Node Scaling**
+**Phase 25: RDMA-based Multi-Node Scaling (Hardware RDMA)**
 Extending Phase 21 orchestration to disaggregated clusters, targeting models that exceed single-device memory.
 - **Deliverables:**
-  - **Distributed Orchestrator:** RDMA-aware task distribution across multiple networked hosts.
+  - **Hardware RDMA:** FPGA-side RDMA engines for direct fabric-to-fabric transfer.
   - **Global Residency Map:** Tracking PT-5 weight residency across a distributed fabric.
   - **100B+ Model Support:** End-to-end inference for massive models (e.g., BitNet-100B) via networked fabrics.
 

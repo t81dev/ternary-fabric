@@ -7,12 +7,13 @@
 #include "tfmbs_device.h"
 #include "fabric_emulator.h"
 #include "tfmbs_driver.h"
+#include "fabric_net.h"
 #include "../include/uapi_tfmbs.h"
 
 static int g_tfmbs_fd = -1;
 static int g_initialized = 0;
 
-// Phase 21: Global Orchestrator
+// Phase 21 & 25: Global Orchestrator
 typedef enum { OK_GEMV, OK_LSTM, OK_LSTM_P, OK_ATTN, OK_CONV3D } orch_kernel_t;
 
 typedef struct orch_task {
@@ -20,6 +21,7 @@ typedef struct orch_task {
     void *w, *i, *o, *a;
     int r, c, av;
     uint8_t tile_mask;
+    int node_id; // Phase 25
     volatile int dispatched;
     fabric_handle_t emu_handle;
     pthread_mutex_t mutex;
@@ -35,6 +37,7 @@ static int g_orch_running = 0;
 
 static int g_num_fabrics = 2;
 static int g_last_dispatched_fid = 0;
+static int g_this_node_id = 0;
 
 // Phase 26: Adaptive Runtime Agent
 typedef enum {
@@ -64,6 +67,11 @@ static void* orchestrator_loop(void* arg);
 
 static void init_device() {
     if (g_initialized) return;
+
+    const char* node_env = getenv("TFMBS_NODE_ID");
+    if (node_env) g_this_node_id = atoi(node_env);
+    fabric_net_init(g_this_node_id);
+
     const char* num_env = getenv("TFMBS_NUM_FABRICS");
     if (num_env) g_num_fabrics = atoi(num_env);
 
@@ -215,6 +223,10 @@ fabric_handle_t fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, void* 
     orch_task_t* task = malloc(sizeof(orch_task_t));
     task->type = OK_GEMV; task->w = weight_ptr; task->i = input_ptr; task->o = output_ptr;
     task->r = rows; task->c = cols; task->tile_mask = tile_mask;
+    task->node_id = g_this_node_id;
+    const char* node_target = getenv("TFMBS_TARGET_NODE");
+    if (node_target) task->node_id = atoi(node_target);
+
     task->dispatched = 0; task->emu_handle = NULL;
     pthread_mutex_init(&task->mutex, NULL); pthread_cond_init(&task->cond, NULL); task->next = NULL;
     pthread_mutex_lock(&g_orch_mutex);
@@ -448,11 +460,18 @@ static void* orchestrator_loop(void* arg) {
         ensure_resident(task->w, best_fid);
         ensure_resident(task->i, best_fid);
 
-        // Dispatch to emulator or Fallback
+        // Dispatch to Local Emulator, Remote Node, or Fallback
         g_last_dispatched_fid = best_fid;
         int offload = should_offload_adaptive(task);
 
-        if (offload) {
+        if (task->node_id != g_this_node_id) {
+            // Phase 25: Remote RDMA Dispatch
+            if (getenv("TFMBS_DEBUG")) printf("[TFMBS-Orch] Dispatching task to Remote Node %d via RDMA\n", task->node_id);
+            // Simulated: pack task and send
+            fabric_net_send(task->node_id, task, sizeof(orch_task_t));
+            // In a real system we'd wait for completion over the wire
+            task->emu_handle = NULL;
+        } else if (offload) {
             g_offload_count++;
             g_fallback_streak = 0;
             if (task->type == OK_GEMV) task->emu_handle = emu_fabric_exec_gemv_async_id(best_fid, task->w, task->i, task->o, task->r, task->c, task->tile_mask);

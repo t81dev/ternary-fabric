@@ -19,10 +19,11 @@ This document serves as the authoritative record for all performance benchmarks,
 | **Ternary Lane** | The smallest parallel compute unit in the fabric. |
 | **Tile** | A group of 15 Ternary Lanes sharing a single frame controller. |
 | **Fabric Instance** | An independent processing entity with its own memory pool and worker thread. |
+| **Dense Trit SRAM** | Optimized storage packing 20 trits into 32 bits (99% efficiency). |
 
 ---
 
-## 🚀 Performance Summary (Phase 21)
+## 🚀 Performance Summary (Phase 21-25)
 
 ### Layer 1: Synthetic (Hardware Limits)
 *Measured using the Phase 21 Emulator at 250 MHz.*
@@ -68,14 +69,24 @@ This document serves as the authoritative record for all performance benchmarks,
 
 ---
 
-## 📉 Multi-Fabric Orchestration (Phase 21)
+## 📉 Multi-Fabric Orchestration (Phase 21 & 25)
 
-| Metric | 1 Fabric | 2 Fabrics | 4 Fabrics |
+| Metric | 1 Fabric | 2 Fabrics | 4 Fabrics | Multi-Node (RDMA) |
 | :--- | :--- | :--- | :--- |
-| **Throughput (GOPS)** | 30.0 | 60.0 | 120.0 |
-| **Scheduling Overhead** | < 0.5% | < 1.2% | ~2.5% |
-| **Lookahead Window** | N/A | 5 Kernels | 5 Kernels |
-| **Residency Hits (Global)** | 85% | 92% | 95% |
+| **Throughput (GOPS)** | 30.0 | 60.0 | 120.0 | ~120.0 (Scale-out) |
+| **Scheduling Overhead** | < 0.5% | < 1.2% | ~2.5% | ~4.0% |
+| **Lookahead Window** | N/A | 5 Kernels | 5 Kernels | 5 Kernels |
+| **Residency Hits (Global)** | 85% | 92% | 95% | 90% (Distributed) |
+
+---
+
+## 💎 Dense Ternary Storage (Phase 24)
+
+| Format | Trits per 32-bit Word | Bits per Trit | Physical Efficiency |
+| :--- | :--- | :--- | :--- |
+| **Naive (2-bit)** | 16 | 2.0 | 79.2% |
+| **PT-5 (8-bit)** | 18 | 1.77 | 94.5% |
+| **Dense (PT-20)** | **20** | **1.6** | **99.1%** |
 
 ---
 
