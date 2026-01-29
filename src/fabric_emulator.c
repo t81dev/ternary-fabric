@@ -227,6 +227,24 @@ static fabric_block_t* find_block(fabric_instance_t* inst, void* ptr) {
     return NULL;
 }
 
+static void adjust_block_busy_locked(fabric_instance_t* inst, void* ptr, int delta) {
+    if (!ptr) return;
+    fabric_block_t* blk = find_block(inst, ptr);
+    if (!blk) return;
+    int next = blk->busy_count + delta;
+    blk->busy_count = next > 0 ? next : 0;
+}
+
+static void update_task_busy_counts(fabric_instance_t* inst, fabric_task_t* task, int delta) {
+    if (!task) return;
+    pthread_mutex_lock(&inst->mutex);
+    adjust_block_busy_locked(inst, task->weight_ptr, delta);
+    adjust_block_busy_locked(inst, task->input_ptr, delta);
+    adjust_block_busy_locked(inst, task->output_ptr, delta);
+    adjust_block_busy_locked(inst, task->aux_ptr, delta);
+    pthread_mutex_unlock(&inst->mutex);
+}
+
 static void update_access(fabric_instance_t* inst, void* ptr) {
     fabric_block_t* curr = find_block(inst, ptr);
     if (curr) {
@@ -328,32 +346,65 @@ static void track_residency_inst(fabric_instance_t* inst, fabric_block_t* b, uin
     }
 }
 
+static fabric_block_t* find_eviction_candidate(fabric_instance_t* inst) {
+    fabric_block_t* victim = NULL;
+    fabric_block_t* scan = inst->blocks;
+    while (scan) {
+        if (scan->used && scan->busy_count == 0) {
+            if (!victim || scan->last_access < victim->last_access) {
+                victim = scan;
+            }
+        }
+        scan = scan->next;
+    }
+    return victim;
+}
+
 void* emu_fabric_alloc_id(int fabric_id, size_t size) {
     fabric_instance_t* inst = get_inst(fabric_id);
     pthread_mutex_lock(&inst->mutex);
     size_t ps = 4096;
     size_t aligned_size = (size + ps - 1) & ~(ps - 1);
-    fabric_block_t* curr = inst->blocks;
-    while (curr) {
-        if (!curr->used && curr->size >= aligned_size) {
-            if (curr->size > aligned_size + ps) {
-                fabric_block_t* nb = (fabric_block_t*)calloc(1, sizeof(fabric_block_t));
-                nb->ptr = (uint8_t*)curr->ptr + aligned_size;
-                nb->size = curr->size - aligned_size;
-                nb->next = curr->next;
-                curr->size = aligned_size;
-                curr->next = nb;
+
+    for (;;) {
+        fabric_block_t* curr = inst->blocks;
+        while (curr) {
+            if (!curr->used && curr->size >= aligned_size) {
+                if (curr->size > aligned_size + ps) {
+                    fabric_block_t* nb = (fabric_block_t*)calloc(1, sizeof(fabric_block_t));
+                    nb->ptr = (uint8_t*)curr->ptr + aligned_size;
+                    nb->size = curr->size - aligned_size;
+                    nb->next = curr->next;
+                    curr->size = aligned_size;
+                    curr->next = nb;
+                }
+                curr->used = 1;
+                curr->resident = 1;
+                curr->last_access = ++inst->access_counter;
+                curr->access_count = 1;
+                inst->last_metrics.pool_used += curr->size;
+                pthread_mutex_unlock(&inst->mutex);
+                return curr->ptr;
             }
-            curr->used = 1;
-            curr->resident = 1;
-            curr->last_access = ++inst->access_counter;
-            curr->access_count = 1;
-            inst->last_metrics.pool_used += curr->size;
-            pthread_mutex_unlock(&inst->mutex);
-            return curr->ptr;
+            curr = curr->next;
         }
-        curr = curr->next;
+
+        fabric_block_t* victim = find_eviction_candidate(inst);
+        if (!victim) break;
+        victim->used = 0;
+        victim->resident = 0;
+        victim->tile_id = -1;
+        victim->busy_count = 0;
+        victim->access_count = 0;
+        victim->residency_hits = 0;
+        if (inst->last_metrics.pool_used >= victim->size) {
+            inst->last_metrics.pool_used -= victim->size;
+        } else {
+            inst->last_metrics.pool_used = 0;
+        }
+        inst->last_metrics.eviction_count++;
     }
+
     pthread_mutex_unlock(&inst->mutex);
     return NULL;
 }
@@ -673,7 +724,9 @@ fabric_handle_t emu_fabric_exec_gemv_async_id(int fid, void* w, void* i, void* o
     fabric_task_t* t = (fabric_task_t*)calloc(1, sizeof(fabric_task_t));
     t->weight_ptr=w; t->input_ptr=i; t->output_ptr=o; t->rows=r; t->cols=c; t->kernel=KERNEL_GEMV; t->tile_mask=tm; t->status=TASK_PENDING;
     t->projected_cost = inst->last_projected_cost;
+    t->src_fabric_id = inst->id;
     pthread_mutex_init(&t->mutex, NULL); pthread_cond_init(&t->cond, NULL);
+    update_task_busy_counts(inst, t, 1);
     pthread_mutex_lock(&inst->queue_mutex);
     if (inst->queue_tail) inst->queue_tail->next = t; else inst->queue_head = t;
     inst->queue_tail = t;
@@ -693,6 +746,9 @@ int emu_fabric_wait(fabric_handle_t h) {
     pthread_mutex_lock(&t->mutex);
     while (t->status != TASK_DONE) pthread_cond_wait(&t->cond, &t->mutex);
     pthread_mutex_unlock(&t->mutex);
+    fabric_instance_t* inst = NULL;
+    if (t->src_fabric_id >= 0) inst = get_inst(t->src_fabric_id);
+    if (inst) update_task_busy_counts(inst, t, -1);
     pthread_mutex_destroy(&t->mutex);
     pthread_cond_destroy(&t->cond);
     free(t);
@@ -807,7 +863,9 @@ fabric_handle_t emu_fabric_exec_lstm_async_id(int fid, void* w, void* i, void* o
     fabric_instance_t* inst = get_inst(fid);
     fabric_task_t* t = (fabric_task_t*)calloc(1, sizeof(fabric_task_t));
     t->weight_ptr=w; t->input_ptr=i; t->output_ptr=o; t->rows=h; t->cols=is; t->kernel=KERNEL_LSTM; t->tile_mask=tm; t->status=TASK_PENDING;
+    t->src_fabric_id = inst->id;
     pthread_mutex_init(&t->mutex, NULL); pthread_cond_init(&t->cond, NULL);
+    update_task_busy_counts(inst, t, 1);
     pthread_mutex_lock(&inst->queue_mutex); if (inst->queue_tail) inst->queue_tail->next = t; else inst->queue_head = t; inst->queue_tail = t;
     pthread_cond_signal(&inst->queue_cond); pthread_mutex_unlock(&inst->queue_mutex);
     return (fabric_handle_t)t;
@@ -817,7 +875,9 @@ fabric_handle_t emu_fabric_exec_attn_async_id(int fid, void* q, void* k, void* v
     fabric_instance_t* inst = get_inst(fid);
     fabric_task_t* t = (fabric_task_t*)calloc(1, sizeof(fabric_task_t));
     t->weight_ptr=q; t->input_ptr=k; t->aux_ptr=v; t->output_ptr=o; t->rows=sl; t->cols=hd; t->kernel=KERNEL_ATTN; t->tile_mask=tm; t->status=TASK_PENDING;
+    t->src_fabric_id = inst->id;
     pthread_mutex_init(&t->mutex, NULL); pthread_cond_init(&t->cond, NULL);
+    update_task_busy_counts(inst, t, 1);
     pthread_mutex_lock(&inst->queue_mutex); if (inst->queue_tail) inst->queue_tail->next = t; else inst->queue_head = t; inst->queue_tail = t;
     pthread_cond_signal(&inst->queue_cond); pthread_mutex_unlock(&inst->queue_mutex);
     return (fabric_handle_t)t;
@@ -827,7 +887,9 @@ fabric_handle_t emu_fabric_exec_conv3d_async_id(int fid, void* w, void* i, void*
     fabric_instance_t* inst = get_inst(fid);
     fabric_task_t* t = (fabric_task_t*)calloc(1, sizeof(fabric_task_t));
     t->weight_ptr=w; t->input_ptr=i; t->output_ptr=o; t->rows=oc; t->cols=ic; t->aux_val=dhw; t->kernel=KERNEL_CONV3D; t->tile_mask=tm; t->status=TASK_PENDING;
+    t->src_fabric_id = inst->id;
     pthread_mutex_init(&t->mutex, NULL); pthread_cond_init(&t->cond, NULL);
+    update_task_busy_counts(inst, t, 1);
     pthread_mutex_lock(&inst->queue_mutex); if (inst->queue_tail) inst->queue_tail->next = t; else inst->queue_head = t; inst->queue_tail = t;
     pthread_cond_signal(&inst->queue_cond); pthread_mutex_unlock(&inst->queue_mutex);
     return (fabric_handle_t)t;
@@ -839,7 +901,9 @@ fabric_handle_t emu_fabric_exec_lstm_persistent_async(void* w, void* i, void* s,
     fabric_instance_t* target = get_inst(fid);
     fabric_task_t* t = (fabric_task_t*)calloc(1, sizeof(fabric_task_t));
     t->weight_ptr=w; t->input_ptr=i; t->output_ptr=s; t->rows=h; t->cols=is; t->kernel=KERNEL_LSTM_PERSISTENT; t->tile_mask=tm; t->status=TASK_PENDING;
+    t->src_fabric_id = target->id;
     pthread_mutex_init(&t->mutex, NULL); pthread_cond_init(&t->cond, NULL);
+    update_task_busy_counts(target, t, 1);
     pthread_mutex_lock(&target->queue_mutex); if (target->queue_tail) target->queue_tail->next = t; else target->queue_head = t; target->queue_tail = t;
     pthread_cond_signal(&target->queue_cond); pthread_mutex_unlock(&target->queue_mutex);
     return (fabric_handle_t)t;

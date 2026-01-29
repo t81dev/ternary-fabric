@@ -5,6 +5,7 @@
 #include "tfmbs_device.h"
 #include "fabric_emulator.h"
 #include "../include/uapi_tfmbs.h"
+#include "../include/tfmbs_dma_regs.h"
 
 #define DMA_RING_SIZE 256
 static struct tfmbs_dma_desc g_dma_ring[DMA_RING_SIZE];

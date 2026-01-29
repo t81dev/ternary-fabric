@@ -1,4 +1,8 @@
 #define _GNU_SOURCE
+#define _XOPEN_SOURCE 700
+#if defined(__APPLE__)
+#define _DARWIN_C_SOURCE
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <dlfcn.h>
@@ -11,6 +15,14 @@
 #include <stdarg.h>
 #include <errno.h>
 #include "tfmbs_device.h"
+
+#if defined(__APPLE__)
+extern int getpagesize(void);
+#endif
+
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS MAP_ANON
+#endif
 
 #if defined(__linux__) && defined(__x86_64__)
 #define HAS_REG_ACCESS 1
@@ -352,6 +364,10 @@ void* realloc(void* ptr, size_t size) {
     }
     return real_realloc(ptr, size);
 }
+
+/* Remove any fortify-style macros so we can supply our own wrappers */
+#undef memcpy
+#undef memset
 
 void* memcpy(void* d, const void* s, size_t n) {
     if (!real_memcpy) init();

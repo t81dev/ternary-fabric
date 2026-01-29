@@ -1,6 +1,6 @@
 # 04: Memory Map & Registers
 
-The Ternary Fabric is controlled via an AXI4-Lite slave interface. The default base address in most system integrations is `0x40000000`.
+The Ternary Fabric is controlled via an AXI4-Lite slave interface. The default base address in most system integrations is `0x40000000`. The canonical offsets are defined in `include/tfmbs_dma_regs.h`; run `tools/validate_register_map.py` to check the header against this table before making driver or RTL changes.
 
 ## 1. Control & Status Registers (Base + 0x00)
 
