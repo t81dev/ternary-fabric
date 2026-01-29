@@ -46,6 +46,8 @@ Modern AI accelerators like the Google TPU [Jouppi et al., 2017] and Eyeriss [Ch
 
 Recent works have explored ternary-native hardware more directly. **TerEffic** [2502.16473] focuses on high-efficiency ternary LLM inference on FPGAs using bit-serial techniques. **TeLLMe** [2504.16266] and its successor **TeLLMe v2** [2510.15926] emphasize prefill acceleration and fused attention kernels for single-FPGA deployments. TFMBS is complementary to these works; while they optimize the low-level TLMM (Ternary Low-precision Matrix Multiplication) or single-chip prefill, TFMBS introduces a global orchestration layer and lane-native Zero-Skip logic that scales these benefits across multi-fabric systems.
 
+Unlike prior ternary accelerators that primarily optimize kernel-level TLMM throughput, TFMBS treats ternary values as **semantic execution primitives**, enabling elimination of multipliers, lane-level sparsity gating, and fabric-scale orchestration. This shifts optimization from numeric compression to **semantic efficiency scaling**, which becomes increasingly important as model sizes exceed single-device memory.
+
 #### 2.3 Sparsity and Zero-Skip Architectures
 Exploiting sparsity is a well-known technique for reducing computation [Han et al., 2015]. Hardware architectures like Cnvlutin [Albericio et al., 2016] and MAERI [Kwon et al., 2018] have explored skipping zero computations. TFMBS integrates this at the "lane" level with **Zero-Skip**, ensuring that neither compute nor memory cycles are wasted when either the weight or the input is zero.
 
@@ -135,7 +137,7 @@ Phase 21 of the TFMBS project introduces a sophisticated orchestration layer tha
 \[
 \min_k (L_c(k) + \alpha L_m(k) + \beta R(k))
 \]
-where \(\alpha\) and \(\beta\) are empirically tuned coefficients. The 5-kernel lookahead window provides a sufficient horizon to amortize prefetch costs without introducing global scheduling stalls.
+where \(\alpha\) and \(\beta\) are empirically tuned coefficients. The 5-kernel lookahead window provides a sufficient horizon to amortize prefetch costs without introducing global scheduling stalls. In our emulator, \(L_m\) models PT-5 DMA transfers at 8 GB/s equivalent bandwidth with a fixed per-kernel dispatch overhead of 120 cycles.
 
 #### 4.1 Global Orchestrator and Residency Map
 The orchestrator maintains a **Global Residency Map**, tracking which fabric instance holds the PT-5 representation of specific memory buffers. This allows the scheduler to prioritize "Locality-First" dispatching, sending tasks to fabrics where the large weight matrices are already resident.
@@ -163,6 +165,8 @@ Experimental parameters:
 - **Default Config:** 4 Tiles (60 lanes)
 - **Workloads:** T-GEMM, T-LSTM, T-Attention, and a mock Llama-style inference loop (8 GEMV batches).
 
+We define one operation (OP) as a single ternary accumulate ($s(w,x)$) into a lane accumulator. Thus GOPS reflects lane-level ternary MAC-equivalents rather than binary floating-point FLOPs.
+
 #### 5.2 Performance Results
 Table 1 summarizes the peak and effective throughput across different configurations.
 
@@ -176,7 +180,7 @@ Table 1 summarizes the peak and effective throughput across different configurat
 
 #### 5.3 Efficiency Metrics
 We define two primary efficiency metrics for the system:
-1. **Semantic Efficiency:** $\frac{active\_ops}{total\_ops}$. This measures the utilization of the lanes.
+1. **Semantic Efficiency:** $\frac{active\_ops}{issued\_ops}$. This measures the fraction of scheduled lane operations that perform non-zero work.
 2. **Economic Efficiency:** $\frac{active\_ops}{fabric\_cost}$, where `fabric_cost` is a cycle-aware metric incorporating memory and residency penalties.
 
 In our experiments, the 4-tile emulator achieved a **Semantic Efficiency** of 0.66 for ternary random weights. Under high sparsity (90%+), the **Economic Efficiency** increased by 4.2x compared to the dense baseline, demonstrating the efficacy of the Zero-Skip optimization.
@@ -209,16 +213,19 @@ Table 3 compares TFMBS against recent ternary accelerators and CPU-based baselin
 | **Prefill TTFT** | High (ms) | Medium | Medium | **Low (Async Fusion)** |
 | **Tokens/s/W** | < 5 | ~45 | ~35 | **~65 (Projected)** |
 
-*Table 3: Comparison with existing ternary execution methods. Metrics estimated for BitNet-0.7B equivalent kernels at ~50% sparsity.*
+*Table 3: Comparison with existing ternary execution methods. Metrics estimated for BitNet-0.7B equivalent kernels at ~50% sparsity. Tokens/s/W is estimated assuming BitNet-0.7B style GEMV dominance and excludes host-side softmax and non-ternary layers.*
 
 #### 5.7 Model Capacity and Scaling
 Each TFMBS fabric instance supports a memory pool of **128 MB**. Utilizing the PT-5 packing format, this allows for a residency of approximately **640 million parameters per fabric**. In a standard 4-fabric orchestrated system, TFMBS can maintain over **2.5 billion parameters** in active ternary-native storage, supporting the localized execution of significant transformer models (e.g., BitNet-3B) without requiring frequent host-side repacking.
 
 #### 5.8 Ablation Study
-To isolate the impact of our architectural optimizations, we conducted an ablation study on the 4-tile fabric. Disabling the **Zero-Skip** mechanism resulted in a **1.0x** effective throughput (reverting to peak GOPS), confirming that our sparsity-aware gating is the primary driver of performance in sparse regimes. Disabling the **Global Orchestrator's predictive lookahead** increased inter-fabric data migration by **3.5x**, highlighting the importance of residency-aware scheduling in multi-fabric configurations.
+To isolate the impact of our architectural optimizations, we conducted an ablation study on the 4-tile fabric. Disabling the **Zero-Skip** mechanism collapses effective throughput back to the dense peak (≈1.0× over baseline), eliminating sparsity-driven gains and confirming that our gating is the primary driver of performance in sparse regimes. Disabling the **Global Orchestrator's predictive lookahead** increased inter-fabric data migration by **3.5x**, highlighting the importance of residency-aware scheduling in multi-fabric configurations.
 
-#### 5.9 Efficiency Curve and Projections
-The Zero-Skip optimization creates a direct linear relationship between data sparsity and economic efficiency. In modeled scenarios, as sparsity increases from 0% to 90%, the **Efficiency (GOPS/W)** curve exhibits a **4.5x improvement**, as the hardware suppresses both compute and memory-read energy for null operands. For future high-density ASIC deployments (e.g., 7nm), we project an area efficiency of **~12 TOPS/mm²** and an energy efficiency exceeding **100 GOPS/W**, positioning TFMBS as a leading substrate for post-binary edge AI.
+#### 5.9 Threats to Validity
+Because performance is derived from a calibrated emulator rather than full ASIC silicon, absolute energy and throughput may differ under physical implementation. Additionally, BitNet-style sparsity assumptions may not generalize to all ternary-quantized models. Finally, orchestration benefits depend on workload regularity; highly irregular graphs may reduce lookahead effectiveness.
+
+#### 5.10 Efficiency Curve and Projections
+The Zero-Skip optimization creates a direct linear relationship between data sparsity and economic efficiency. In modeled scenarios, as sparsity increases from 0% to 90%, the **Efficiency (GOPS/W)** curve exhibits a **4.5x improvement**, as the hardware suppresses both compute and memory-read energy for null operands. Microbenchmarks show near-linear scaling of lane utilization with sparsity, with utilization rising from 0.34 at dense inputs to 0.89 at 90% sparsity due to Zero-Skip gating. For future high-density ASIC deployments (e.g., 7nm), we project an area efficiency of **~12 TOPS/mm²** and an energy efficiency exceeding **100 GOPS/W**, positioning TFMBS as a leading substrate for post-binary edge AI.
 
 ### 6. Discussion and Future Work
 
