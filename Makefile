@@ -39,7 +39,7 @@ OBJ_DIR = obj_dir
 VERILATOR_FLAGS = --cc $(HW_DIR)/ternary_fabric_top.v -I$(HW_DIR) --Mdir $(OBJ_DIR) -Wno-fatal
 
 # Targets
-ALL_C_BINS = $(BIN_DIR)/mediator_mock $(BIN_DIR)/pt5_example $(BIN_DIR)/reference_tfmbs $(BIN_DIR)/test_device $(BIN_DIR)/mock_llama $(BIN_DIR)/test_dynamic_detection $(BIN_DIR)/test_phase10 $(BIN_DIR)/test_multi_tile $(BIN_DIR)/test_eviction $(BIN_DIR)/sparse_stress $(BIN_DIR)/test_convergence
+ALL_C_BINS = $(BIN_DIR)/mediator_mock $(BIN_DIR)/pt5_example $(BIN_DIR)/reference_tfmbs $(BIN_DIR)/test_device $(BIN_DIR)/mock_llama $(BIN_DIR)/test_dynamic_detection $(BIN_DIR)/test_phase10 $(BIN_DIR)/test_multi_tile $(BIN_DIR)/test_eviction $(BIN_DIR)/sparse_stress $(BIN_DIR)/test_convergence $(BIN_DIR)/test_adaptive
 ALL_LIBS = $(BIN_DIR)/libtfmbs_device$(SHLIB_EXT) $(BIN_DIR)/libtfmbs_intercept$(SHLIB_EXT)
 ALL_HW_SIM = $(BIN_DIR)/fabric_tb.vvp
 
@@ -89,6 +89,9 @@ $(BIN_DIR)/sparse_stress: benchmarks/synthetic/sparse_stress.c $(BIN_DIR)/libtfm
 	$(CC) $(CFLAGS) -o $@ $< -L$(BIN_DIR) -ltfmbs_device
 
 $(BIN_DIR)/test_convergence: tests/test_convergence.c $(BIN_DIR)/libtfmbs_device$(SHLIB_EXT)
+	$(CC) $(CFLAGS) -o $@ $< -L$(BIN_DIR) -ltfmbs_device
+
+$(BIN_DIR)/test_adaptive: tests/test_adaptive.c $(BIN_DIR)/libtfmbs_device$(SHLIB_EXT)
 	$(CC) $(CFLAGS) -o $@ $< -L$(BIN_DIR) -ltfmbs_device
 
 run_mock_llama: $(BIN_DIR)/mock_llama $(ALL_LIBS)

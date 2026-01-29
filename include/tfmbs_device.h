@@ -31,6 +31,10 @@ typedef struct {
     double   fabric_cost;
     double   semantic_efficiency;
     double   economic_efficiency;
+
+    // Phase 26 Adaptive Metrics
+    uint64_t fallback_count;
+    uint64_t offload_count;
 } fabric_metrics_t;
 
 typedef void* fabric_handle_t;

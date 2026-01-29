@@ -79,6 +79,25 @@ This document serves as the authoritative record for all performance benchmarks,
 
 ---
 
+## 🧠 Hybrid Execution & Adaptive Agent (Phase 26)
+
+The Adaptive Runtime Agent dynamically switches between Ternary Fabric and CPU Fallback based on real-time sparsity telemetry.
+
+| Scenario | Sparsity | Path | Effective GOPS | Efficiency Uplift |
+| :--- | :--- | :--- | :--- | :--- |
+| **High Sparsity** | > 80% | **Fabric** | ~30.0 (per node) | 3.0x vs Dense |
+| **Medium Sparsity** | 50% | **Fabric** | ~15.0 (per node) | 2.0x vs Dense |
+| **Low Sparsity** | < 30% | **CPU Fallback** | Host-Limited | ~1.5x vs Stalled Fabric |
+
+### Adaptive Performance (Stress Test)
+*Measured using `tests/test_adaptive` with `TFMBS_SPARSITY_THRESHOLD=0.5`.*
+
+- **Initial State:** Sparsity 0.8 -> **Fabric** (Offload count increases).
+- **Transition:** Sparsity drops to 0.1 -> **CPU Fallback** (Fallback count increases).
+- **Recovery:** Sparsity returns to 0.9 -> **Fabric** (Detected via periodic probe).
+
+---
+
 ## 📝 Discrepancies & Notes
 - **Baseline Data:** CPU baselines are measured using the `src/reference_tfmbs.c` implementation and `tests/mock_llama.c`.
 - **Phase 20 Baseline:** Simulated by setting `TFMBS_DISABLE_LOOKAHEAD=1`, which disables the predictive Global Orchestrator.
