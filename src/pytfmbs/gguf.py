@@ -2,7 +2,7 @@ import struct
 import numpy as np
 import os
 from .constants import SRAM_BANK_A_OFFSET, SRAM_TILE_STRIDE
-from .torch import pack_gemv_weights
+from .torch_integration import pack_gemv_weights
 
 # GGML types
 GGML_TYPE_F32  = 0

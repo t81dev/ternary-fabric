@@ -41,7 +41,7 @@ def test_gguf_loading():
         # 4. Verify functional correctness via execution
         # Input: All 1s (packed for GEMV)
         inputs = np.ones(128, dtype=np.int8)
-        packed_x = pytfmbs.torch.pack_gemv_input(inputs)
+        packed_x = pytfmbs.torch_integration.pack_gemv_input(inputs)
         fabric.load(0x2000, packed_x)
 
         # Run T-GEMM kernel

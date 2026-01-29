@@ -24,13 +24,14 @@ jobs:
         sudo apt-get install -y iverilog verilator
         python -m pip install --upgrade pip
         pip install numpy setuptools pytest
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
 
     - name: Build all
       run: make all
 
     - name: Run Python tests
       run: |
-        export PYTHONPATH=$PYTHONPATH:$(pwd)/src/pytfmbs
+        export PYTHONPATH=$PYTHONPATH:$(pwd)/src
         pytest tests/
 
     - name: Run Mock Llama check
