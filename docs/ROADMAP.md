@@ -161,6 +161,7 @@ Establishing TFMBS as a first-class citizen in the MLIR/LLVM ecosystem to enable
 - **Deliverables:**
   - **Lowering Passes:** Automated conversion from Torch-MLIR and ONNX to TFMBS kernels.
   - **Operator Fusion:** Graph-level optimizations for cross-kernel fusion and buffer reuse.
+  - **Compiler Plan:** See `docs/compiler_track_plan.md` for the current MLIR dialect status, TableGen targets, and next work items while hardware verification is pending.
 
 **Phase 26: Dynamic Semantic Scheduling & Precision Adaptation** ✅
 Using real-time telemetry to adjust execution precision and semantic depth based on model layer sensitivity.
