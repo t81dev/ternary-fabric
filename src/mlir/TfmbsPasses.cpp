@@ -1,14 +1,14 @@
 #include "TfmbsDialect.h"
 #include "TfmbsPasses.h"
 
-#include "mlir/Dialect/Linalg/IR/LinalgOps.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/OperationSupport.h"
-#include "mlir/IR/Module.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/PassManager.h"
-#include "mlir/Pass/PassRegistration.h"
+#include "mlir/Pass/PassRegistry.h"
 
 using namespace mlir;
 using namespace mlir::tfmbs;
@@ -36,6 +36,12 @@ std::unique_ptr<Pass> tfmbs::createTfmbsToLinalgPass() {
   return std::make_unique<TfmbsToLinalgPass>();
 }
 
+namespace {
+static PassPipelineRegistration<> pipeline(
+    "tfmbs-to-linalg", "Lower tfmbs ops to linalg.matmul",
+    [](OpPassManager &pm) { pm.addPass(std::make_unique<TfmbsToLinalgPass>()); });
+} // namespace
+
 void tfmbs::registerTfmbsPasses() {
-  PassRegistration<TfmbsToLinalgPass>("tfmbs-to-linalg", "Lower tfmbs ops to linalg.matmul");
+  (void)pipeline;
 }

@@ -1,9 +1,9 @@
-// RUN: mlir-opt --tfmbs-to-linalg %s | FileCheck %s
+// RUN: mlir-opt --pass-pipeline=tfmbs-to-linalg %s | FileCheck %s
 
 module {
-  func @gemv(%weights: memref<4x4xf32>, %input: memref<4xf32>, %output: memref<4xf32>) {
+  func.func @gemv(%weights: memref<4x4xf32>, %input: memref<4x4xf32>, %output: memref<4x4xf32>) {
     tfmbs.gemv %weights, %input, %output {tile_mask = 1}
-    return
+    func.return
   }
 }
 

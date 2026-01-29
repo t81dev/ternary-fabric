@@ -1,22 +1,16 @@
 #ifndef TFMBS_DIALECT_H
 #define TFMBS_DIALECT_H
 
-#include "mlir/IR/Attributes.h"
 #include "mlir/IR/Dialect.h"
+#include "mlir/IR/Operation.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
-#include "mlir/IR/Value.h"
 
 #include <cstdint>
 
 namespace mlir {
 class DialectRegistry;
 class MLIRContext;
-class Operation;
-class OpBuilder;
-class OperationState;
-class IntegerAttr;
-class Type;
 } // namespace mlir
 
 namespace mlir {
@@ -38,60 +32,13 @@ public:
   static void registerDialect(DialectRegistry &registry);
 };
 
-class TfmbsPackOp
-    : public Op<TfmbsPackOp, OpTrait::NOperands<2>, OpTrait::ZeroResult> {
-public:
-  using Op::Op;
-  static StringRef getOperationName() { return "tfmbs.pack"; }
-  static void build(OpBuilder &builder, OperationState &state, Value src,
-                    Value dst);
-
-  Value getSource() { return getOperand(0); }
-  Value getDestination() { return getOperand(1); }
-};
-
-class TfmbsTransferOp
-    : public Op<TfmbsTransferOp, OpTrait::NOperands<3>, OpTrait::ZeroResult> {
-public:
-  using Op::Op;
-  static StringRef getOperationName() { return "tfmbs.transfer"; }
-  static void build(OpBuilder &builder, OperationState &state, Value src,
-                    Value dst, Value length);
-
-  Value getSource() { return getOperand(0); }
-  Value getDestination() { return getOperand(1); }
-  Value getLength() { return getOperand(2); }
-};
-
-class TfmbsDmaLoadOp
-    : public Op<TfmbsDmaLoadOp, OpTrait::NOperands<2>, OpTrait::ZeroResult> {
-public:
-  using Op::Op;
-  static StringRef getOperationName() { return "tfmbs.dma_load"; }
-  static void build(OpBuilder &builder, OperationState &state, Value hostBuffer,
-                    Value fabricBuffer);
-
-  Value getHostBuffer() { return getOperand(0); }
-  Value getFabricBuffer() { return getOperand(1); }
-};
-
-class TfmbsGemvOp
-    : public Op<TfmbsGemvOp, OpTrait::NOperands<3>, OpTrait::ZeroResult> {
-public:
-  using Op::Op;
-  static StringRef getOperationName() { return "tfmbs.gemv"; }
-  static void build(OpBuilder &builder, OperationState &state, Value weight,
-                    Value input, Value output, IntegerAttr tileMaskAttr);
-
-  Value getWeight() { return getOperand(0); }
-  Value getInput() { return getOperand(1); }
-  Value getOutput() { return getOperand(2); }
-  IntegerAttr getTileMaskAttr();
-};
-
 void registerTfmbsDialect(DialectRegistry &registry);
 
 } // namespace tfmbs
 } // namespace mlir
+
+#define GET_OP_CLASSES
+#include "TfmbsOps.h.inc"
+#undef GET_OP_CLASSES
 
 #endif // TFMBS_DIALECT_H

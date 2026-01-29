@@ -37,6 +37,12 @@ Track B (Compiler & Ecosystem) in `docs/ROADMAP.md:156-170` is positioned to del
 With the hardware team waiting on the XC7Z020/XC7Z045, finishing these compiler deliverables keeps Track B moving and ensures the software stack can fully exploit the fabric once Phase 22 hardware verification completes.
 
 ### Current Artifacts
-- `src/mlir/TfmbsOps.td` documents the dialect and operator grammar in TableGen, and `src/mlir/TfmbsDialect.{h,cpp}` leverage that schema to expose `tfmbs.pack`, `tfmbs.transfer`, `tfmbs.dma_load`, and `tfmbs.gemv`.
-- `src/mlir/TfmbsPasses.{h,cpp}` implement `TfmbsToLinalgPass`, which rewrites `tfmbs.gemv` into `linalg.matmul`.
-- Tests under `tests/mlir/` cover both the lit-style `tfmbs_to_linalg.mlir` (for future mlir-opt runs) and the `TfmbsPassTest.cpp` executable that parses, runs the pass, and asserts the expected transformation happens before linking into downstream toolchains.
+- `src/mlir/TfmbsOps.td` defines the dialect and operations; `mlir-tblgen` (run from `../llvm-project/build/bin/mlir-tblgen` with `-I` pointing at the MLIR/LLVM include tree) now regenerates `src/mlir/TfmbsOps.h.inc`/`TfmbsOps.cpp.inc`, which `TfmbsDialect.{h,cpp}` include so the generated op classes and `GET_OP_LIST` stay synchronized with the TableGen metadata.
+- `src/mlir/TfmbsPasses.{h,cpp}` implement `TfmbsToLinalgPass`, and a `PassPipelineRegistration` hook registers the `tfmbs-to-linalg` pipeline so `mlir-opt --tfmbs-to-linalg` can be wired later.
+- Tests under `tests/mlir/` cover both the lit-style `tfmbs_to_linalg.mlir` (for future mlir-opt runs) and the `TfmbsPassTest.cpp` executable that parses, runs the pass, and validates that it emits `linalg.matmul`.
+
+-### Runbook & Status
+- **TableGen regeneration:** `mlir-tblgen -gen-op-decls/defs src/mlir/TfmbsOps.td` succeeded once the LLVM/MLIR build under `/Users/t81dev/Code/llvm-project/build` was available.
+- **Pass/test CMake wrapper:** Added `CMakeLists.txt` that links `src/mlir/TfmbsDialect.cpp`, `TfmbsPasses.cpp`, and `tests/mlir/TfmbsPassTest.cpp` against the MLIR build via `MLIR::` targets. Run `cmake -G Ninja -DLLVM_DIR=... -DMLIR_DIR=...` inside a `build` directory to generate `TfmbsPassTest` plus its plugin.
+- **Next step:** Build with Ninja, run `./build/TfmbsPassTest`, and invoke `/Users/t81dev/Code/llvm-project/build/bin/mlir-opt --load-dialect-plugin=./build/libtfmbs_plugin.dylib --pass-pipeline=tfmbs-to-linalg tests/mlir/tfmbs_to_linalg.mlir` (or equivalent) so the lowering is verified. This currently crashes inside `StorageUniquerImpl::getOrCreate()` because the plugin pulls in its own copy of the static MLIR runtime, so we still need an MLIR build with shared libs (e.g., `-DBUILD_SHARED_LIBS=ON`) before the plugin can load cleanly.
+- **Shared MLIR build:** Reconfiguring LLVM/MLIR with `-DBUILD_SHARED_LIBS=ON` to regain shared `libMLIRIR`/`libLLVMSupport` symbols takes a long time (the first `cmake --build ... mlir-opt` attempt ran for >8 minutes before the toolchain build timed out). If shared artifacts are available, the plugin crash should disappear because it will no longer embed a second set of `StorageUniquer` globals.

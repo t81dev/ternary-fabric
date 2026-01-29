@@ -1,19 +1,21 @@
-//===- TfmbsOps.td - TFMBS Dialect operations -------------------*- tablegen -*-===//
+//===- TfmbsOps.td - TFMBS dialect definition -----------------*- tablegen -*-===//
 //
-// This file contains a lightweight TableGen-based definition of the operations
-// that will appear in the TFMBS dialect. It can be consumed by mlir-tblgen to
-// generate the standard dialect header once the build system has integrated
-// MLIR TableGen support.
+// This file defines the Tfmbs dialect and its operations for the Ternary Fabric.
 //
-include "mlir/IR/Dialect.h"
+include "mlir/IR/DialectBase.td"
 include "mlir/IR/OpBase.td"
 
 def Tfmbs_Dialect : Dialect {
   let name = "tfmbs";
-  let description = "Dialect for the Ternary Fabric semantic operations";
+  let description = "Dialect for the Ternary Fabric semantic operations.";
+  let cppNamespace = "::mlir::tfmbs";
 }
 
-def TfmbsPackOp : Op<TfmbsPackOp, [NoSideEffect]> {
+/// Base class for Tfmbs operations so we don't repeat the dialect reference.
+class TfmbsOp<string mnemonic> : Op<Tfmbs_Dialect, mnemonic> {
+}
+
+def TfmbsPackOp : TfmbsOp<"pack"> {
   let summary = "Pack a dense tensor into PT-5 format.";
   let description = [{
     Loads a host tensor and writes the quantized PT-5 representation into the
@@ -25,7 +27,7 @@ def TfmbsPackOp : Op<TfmbsPackOp, [NoSideEffect]> {
   );
 }
 
-def TfmbsTransferOp : Op<TfmbsTransferOp> {
+def TfmbsTransferOp : TfmbsOp<"transfer"> {
   let summary = "Direct copy between fabric memory banks.";
   let arguments = (ins
     AnyType:$src,
@@ -34,7 +36,7 @@ def TfmbsTransferOp : Op<TfmbsTransferOp> {
   );
 }
 
-def TfmbsDmaLoadOp : Op<TfmbsDmaLoadOp> {
+def TfmbsDmaLoadOp : TfmbsOp<"dma_load"> {
   let summary = "Issue a DMA load into the fabric from host memory.";
   let arguments = (ins
     AnyType:$host,
@@ -42,12 +44,11 @@ def TfmbsDmaLoadOp : Op<TfmbsDmaLoadOp> {
   );
 }
 
-def TfmbsGemvOp : Op<TfmbsGemvOp> {
+def TfmbsGemvOp : TfmbsOp<"gemv"> {
   let summary = "High-level GEMV kernel targeting the ternary fabric.";
   let arguments = (ins
     AnyType:$weight,
     AnyType:$input,
     AnyType:$output
   );
-  let assemblyFormat = "$weight, $input, $output attr-dict";
 }

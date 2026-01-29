@@ -1,43 +1,48 @@
 #include "TfmbsDialect.h"
 #include "TfmbsPasses.h"
 
-#include "mlir/Dialect/Linalg/IR/LinalgOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/IR/Block.h"
+#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/IR/MLIRContext.h"
-#include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/LogicalResult.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace mlir;
 
 int main(int argc, char **argv) {
-  MLIRContext context;
   DialectRegistry registry;
-  tfmbs::registerTfmbsDialect(registry);
+  registry.insert<mlir::BuiltinDialect>();
+  registry.insert<func::FuncDialect>();
   registry.insert<linalg::LinalgDialect>();
-  context.appendDialectRegistry(registry);
+  mlir::tfmbs::registerTfmbsDialect(registry);
+  MLIRContext context(registry);
+  context.loadDialect<mlir::tfmbs::TfmbsDialect>();
+  context.loadDialect<func::FuncDialect>();
+  context.loadDialect<linalg::LinalgDialect>();
 
-  constexpr StringLiteral moduleStr = R"mlir(
-module {
-  func @test(%w: memref<4x4xf32>, %x: memref<4xf32>, %y: memref<4xf32>) {
-    tfmbs.gemv %w, %x, %y {tile_mask = 1}
-    return
-  }
-}
-)mlir";
-
-  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(moduleStr, &context);
-  if (!module) {
-    llvm::errs() << "Failed to parse embedded module\n";
-    return 1;
-  }
+  OpBuilder builder(&context);
+  auto module = ModuleOp::create(builder.getUnknownLoc());
+  auto memref4x4 = MemRefType::get({4, 4}, builder.getF32Type());
+  auto funcType = builder.getFunctionType({memref4x4, memref4x4, memref4x4}, {});
+  builder.setInsertionPointToStart(module.getBody());
+  auto funcOp = builder.create<func::FuncOp>(builder.getUnknownLoc(), "test", funcType);
+  Block *entryBlock = funcOp.addEntryBlock();
+  builder.setInsertionPointToStart(entryBlock);
+  builder.create<mlir::tfmbs::TfmbsGemvOp>(builder.getUnknownLoc(),
+      entryBlock->getArgument(0), entryBlock->getArgument(1),
+      entryBlock->getArgument(2));
+  builder.create<func::ReturnOp>(builder.getUnknownLoc());
 
   PassManager pm(&context);
-  pm.addPass(tfmbs::createTfmbsToLinalgPass());
-  if (failed(pm.run(module.get()))) {
+  pm.addPass(mlir::tfmbs::createTfmbsToLinalgPass());
+  if (failed(pm.run(module))) {
     llvm::errs() << "TfmbsToLinalgPass failed\n";
     return 1;
   }
@@ -45,7 +50,7 @@ module {
   std::string printed;
   {
     llvm::raw_string_ostream os(printed);
-    module->print(os);
+    module.print(os);
   }
 
   if (printed.find("linalg.matmul") == std::string::npos) {
