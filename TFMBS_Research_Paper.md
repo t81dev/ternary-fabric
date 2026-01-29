@@ -103,7 +103,7 @@ The theoretical information density is:
 However, practical PT-5 encoding uses only values \((0 \dots 242)\), yielding a physical utilization of \((242/256 \approx 94.5\%)\). After accounting for alignment and hardware unpacker constraints, the implemented TFMBS fabric **sustains ≈95% effective bandwidth utilization** in modeled transfers.
 
 #### 3.3 Zero-Skip Optimization
-The TFMBS hardware monitors the $w=0$ and $x=0$ conditions. When either is true, the Lane's clock is gated, and the accumulation is bypassed. Formally, when $w=0 \lor x=0$, the lane suppresses issue and memory fetch, reducing both dynamic toggle energy and effective issued operations. This "Zero-Skip" mechanism is the primary driver of **Economic Efficiency**, as it directly reduces the cycle count for sparse workloads.
+The TFMBS hardware monitors the $w=0$ and $x=0$ conditions. When either is true, the Lane's clock is gated, and the accumulation is bypassed. Formally, when $w=0 \lor x=0$, the lane suppresses issue and memory fetch, reducing both dynamic toggle energy and effective issued operations. This "Zero-Skip" mechanism is the primary driver of **Fabric-Normalized Efficiency**, as it directly reduces the cycle count for sparse workloads.
 
 #### 3.4 System Organization
 ```text
@@ -179,9 +179,9 @@ Table 1 summarizes the peak and effective throughput across different configurat
 #### 5.3 Efficiency Metrics
 We define two primary efficiency metrics for the system:
 1. **Semantic Efficiency:** $\frac{active\_ops}{issued\_ops}$. This measures the fraction of scheduled lane operations that perform non-zero work.
-2. **Economic Efficiency:** $\frac{active\_ops}{fabric\_cost}$, where `fabric_cost` is a cycle-aware metric incorporating memory and residency penalties.
+2. **Fabric-Normalized Efficiency:** $\frac{active\_ops}{fabric\_cost}$, where `fabric_cost` is a cycle-aware metric incorporating memory and residency penalties.
 
-In our experiments, the 4-tile emulator achieved a **Semantic Efficiency** of 0.66 for ternary random weights. Under high sparsity (90%+), the **Economic Efficiency** increased by 4.2x compared to the dense baseline, demonstrating the efficacy of the Zero-Skip optimization.
+In our experiments, the 4-tile emulator achieved a **Semantic Efficiency** of 0.66 for ternary random weights. Under high sparsity (90%+), the **Fabric-Normalized Efficiency** increased by 4.2x compared to the dense baseline, demonstrating the efficacy of the Zero-Skip optimization.
 
 #### 5.4 Hardware Synthesis
 Synthesis for the XC7Z020 FPGA (Zynq-7000) confirms the area efficiency of the ternary design.
@@ -199,7 +199,7 @@ Synthesis for the XC7Z020 FPGA (Zynq-7000) confirms the area efficiency of the t
 On the XC7Z020 FPGA, the 4-tile TFMBS fabric is estimated to consume **~2.4W** of dynamic power at 250 MHz for ternary GEMM workloads. This efficiency is driven by the Zero-Skip clock gating and the absence of high-toggle binary multipliers. TFMBS provides an **estimated 12.5x improvement in energy-per-inference for ternary GEMM workloads** relative to an ARM NEON (A53) baseline on the same SoC, assuming equivalent sparsity and memory locality.
 
 #### 5.6 Comparative Analysis
-Table 3 compares TFMBS against recent ternary accelerators and CPU-based baselines. These projections focus on ternary-dominant kernels and exclude host-side scheduling, softmax, and embedding layers. Notably, TFMBS's energy efficiency (~25.2 GOPS/W) effectively outperforms standard 8-bit NPUs (typically 10–15 TOPS/W) by a factor of 2x on energy alone, as one ternary operation is semantically equivalent to one INT8 operation for BitNet-style models, while also providing a 5x reduction in weight storage requirements.
+Table 3 compares TFMBS against recent ternary accelerators and CPU-based baselines. These projections focus on ternary-dominant kernels and exclude host-side scheduling, softmax, and embedding layers. Notably, TFMBS's energy efficiency (~25.2 GOPS/W) effectively outperforms standard 8-bit NPUs (typically 10–15 TOPS/W) by a factor of 2x on energy alone, as one ternary operation is functionally equivalent for BitNet-style ternary dot-products, while also providing a 5x reduction in weight storage requirements.
 
 | Metric | bitnet.cpp (CPU) | TeLLMe (FPGA) | TerEffic (FPGA) | **TFMBS (Phase 21)** |
 | :--- | :--- | :--- | :--- | :--- |
@@ -221,7 +221,7 @@ Each TFMBS fabric instance supports a memory pool of **128 MB**. Utilizing the P
 To isolate the impact of our architectural optimizations, we conducted an ablation study on the 4-tile fabric. Disabling the **Zero-Skip** mechanism collapses effective throughput back to the dense peak (≈1.0× over baseline), eliminating sparsity-driven gains and confirming that our gating is the primary driver of performance in sparse regimes. Disabling the **Global Orchestrator's predictive lookahead** increased inter-fabric data migration by **3.5x**, highlighting the importance of residency-aware scheduling in multi-fabric configurations.
 
 ```text
-[Figure 2: Economic Efficiency vs. Data Sparsity. The curve demonstrates a
+[Figure 2: Fabric-Normalized Efficiency vs. Data Sparsity. The curve demonstrates a
 near-linear scaling of GOPS/W as the Zero-Skip mechanism suppresses compute
 and memory energy for null trits, reaching a 4.5x improvement at 90% sparsity.]
 
@@ -232,10 +232,10 @@ by maintaining buffer locality.]
 ```
 
 #### 5.9 Threats to Validity
-Because performance is derived from a calibrated emulator rather than full ASIC silicon, absolute energy and throughput may differ under physical implementation. Additionally, BitNet-style sparsity assumptions may not generalize to all ternary-quantized models. Finally, orchestration benefits depend on workload regularity; highly irregular graphs may reduce lookahead effectiveness.
+Because performance is derived from a calibrated emulator rather than full ASIC silicon, absolute energy and throughput may differ under physical implementation. Additionally, BitNet-style sparsity assumptions may not generalize to all ternary-quantized models. Finally, orchestration benefits depend on workload regularity; highly irregular graphs may reduce lookahead effectiveness. Emulator timing does not yet model off-chip DRAM contention under multi-tenant fabric saturation.
 
 #### 5.10 Efficiency Curve and Projections
-The Zero-Skip optimization creates a direct linear relationship between data sparsity and economic efficiency. In modeled scenarios, as sparsity increases from 0% to 90%, the **Efficiency (GOPS/W)** curve exhibits an **approaching ~4–5× improvement**, as the hardware suppresses both compute and memory-read energy for null operands. Microbenchmarks show near-linear scaling of lane utilization with sparsity, with utilization rising from 0.34 at dense inputs to 0.89 at 90% sparsity due to Zero-Skip gating. For future high-density ASIC deployments (e.g., 7nm), we project an area efficiency of **~12 TOPS/mm²** and an energy efficiency exceeding **100 GOPS/W**, positioning TFMBS as a leading substrate for post-binary edge AI.
+The Zero-Skip optimization creates a direct linear relationship between data sparsity and fabric-normalized efficiency. In modeled scenarios, as sparsity increases from 0% to 90%, the **Efficiency (GOPS/W)** curve exhibits an **approaching ~4–5× improvement**, as the hardware suppresses both compute and memory-read energy for null operands. Microbenchmarks show near-linear scaling of lane utilization with sparsity, with utilization rising from 0.34 at dense inputs to 0.89 at 90% sparsity due to Zero-Skip gating. For future high-density ASIC deployments (e.g., 7nm), we project an area efficiency of **~12 TOPS/mm²** and an energy efficiency exceeding **100 GOPS/W**, positioning TFMBS as a leading substrate for post-binary edge AI.
 
 ### 6. Discussion and Future Work
 
