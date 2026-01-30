@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Utility to launch an application with the Ternary Fabric interposer preloaded.
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+BIN_DIR="$ROOT_DIR/bin"
+
+if [ -z "$1" ]; then
+    echo "Usage: $0 <app> [args...]"
+    exit 1
+fi
+
+UNAME="$(uname -s)"
+if [ "$UNAME" = "Darwin" ]; then
+    PRELOAD_ENV="DYLD_INSERT_LIBRARIES"
+    LIBPATH_ENV="DYLD_LIBRARY_PATH"
+    SHLIB_EXT=".dylib"
+else
+    PRELOAD_ENV="LD_PRELOAD"
+    LIBPATH_ENV="LD_LIBRARY_PATH"
+    SHLIB_EXT=".so"
+fi
+
+INTERCEPT="$BIN_DIR/libtfmbs_intercept${SHLIB_EXT}"
+DEVICE_LIB="$BIN_DIR/libtfmbs_device${SHLIB_EXT}"
+
+if [ ! -f "$INTERCEPT" ] || [ ! -f "$DEVICE_LIB" ]; then
+    echo "🏗️  Building libtfmbs_device and libtfmbs_intercept..."
+    make -C "$ROOT_DIR" "bin/$(basename "$INTERCEPT")" "bin/$(basename "$DEVICE_LIB")"
+fi
+
+existing_libpath="${!LIBPATH_ENV:-}"
+if [ -n "$existing_libpath" ]; then
+    export "$LIBPATH_ENV"="$BIN_DIR:$existing_libpath"
+else
+    export "$LIBPATH_ENV"="$BIN_DIR"
+fi
+
+export "$PRELOAD_ENV"="$INTERCEPT"
+
+shift
+exec "$@"

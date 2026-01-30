@@ -55,6 +55,8 @@ The Ternary Fabric provides a scalable, efficient, and high-throughput substrate
 - **Software readiness:** The compiler/MLIR pipeline (Phase 23) already emits the `tfmbs` dialect, fusion pass, and telemetry hints, and CI/regression scripts run `tests/mlir/run_tfmbs_to_linalg.py` plus `tools/adaptive_dashboard.py` so the telemetry contract is verified before every merge.  
 - **Adaptive telemetry:** The runtime’s `AdaptiveRuntimeAgent` already captures `fusion_order`/`fusion_sparsity`, and `tools/run_hw_dma_telemetry.sh`/`tools/capture_dma_telemetry.py` reproduce the dashboard comparison locally using the Verilator DMA path while the FPGA racks remain offline.  
 - **Hardware gate:** Physical verification (RTL synthesis, PCIe/DMA driver validation, telemetry comparison, >50× efficiency benchmark on XC7Z020/XC7Z045) is documented in `docs/FPGA_VERIFICATION_CHECKLIST.md` and `docs/hardware_verification_report.md` and will resume once the boards return. This whitepaper will be updated with the hardware results and publicly visible metrics when the Silicon Reality milestone is completed.
+- **Reference integration:** `tools/reference_integration.py` rebuilds `bin/mock_llama`, runs the CPU baseline, reruns it through `tools/tfmbs-run`, and emits CSV logs plus a comparison chart, so every latency claim can be recomputed on any desktop without FPGA racks.
+- **Fabric Illusion contract:** `docs/FABRIC_ILLUSION_CONTRACT.md` now enumerates the allocations, heuristics, and signal handlers that the intercept touches to sustain the illusion.
 
 ## 7. Visual Summary
 - **Tile block:** Each tile contains 15 ternary lanes fed by a PT-5 unpacker that streams 1.58-bit SRAM rows into lane-sized trits, plus zero-skip gates that disable lane clocks when operands are zero.  
@@ -68,6 +70,10 @@ The Ternary Fabric provides a scalable, efficient, and high-throughput substrate
 - **TerEffic / TENET metrics:** TerEffic reports aggressive on-chip ternary throughput for smaller models via pipelined ternary units, and TENET leverages sparsity-aware LUTs on edge FPGA fabrics; both complement Ternary Fabric’s predictive multi-fabric orchestrator that pools many tiles for larger-scale inference.
 - **Density advantage:** Balanced ternary’s ~1.585 bits/trit packs sign/magnitude information more efficiently than unsigned ternary or binary sign-magnitude encodings, making it a compelling substrate for sparse LLM layers.  
 - **Ultra-low power:** The combination of gating logic, PT-5 SRAM, and a 250 MHz fabric clock delivers power/operation savings compared to 1.5–2.0 GHz SIMD engines; this energy advantage is tracked via the Zero-Skip logic and adaptive telemetry dashboards even before the hardware racks reopen.
+
+## 9. Measurement Discipline
+
+All numeric claims in this paper are grounded in the emulator traces captured in `BENCHMARKS.md` and the cycle-aware cost model from `docs/18_WORKLOADS_METRICS.md`. Our north-star KPI is **zero-skip work avoided per Fabric Cost** (`zero_skips / fabric_cost`), which measures the MACs we skip against the energy proxy already available in telemetry. The `tools/reference_integration.py` helper rebuilds `bin/mock_llama`, reruns it through `tools/tfmbs-run`, and writes a CSV summary plus a comparison chart so reviewers can reproduce both the numerator (zero-skip delta) and denominator (Fabric Cost) without FPGA racks.
 
 ---
 © 2026 Ternary Fabric Project.

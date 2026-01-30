@@ -128,6 +128,7 @@ Check out the `examples/` directory for runnable scripts:
 *   `dma_loader_demo.py`: Using the AXI-Stream DMA path.
 *   `profiling_example.py`: Extracting hardware performance counters.
 *   `tests/test_phase21_multi_fabric.c`: Verifying global orchestration and cross-fabric dependency management.
+*   `tools/reference_integration.py`: Reproducible mock GEMV + Fabric intercept run that writes logs, CSV metrics, and a comparison chart.
 
 ---
 © 2026 Ternary Fabric Project. All rights reserved.

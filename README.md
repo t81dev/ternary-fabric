@@ -26,6 +26,14 @@ cat BENCHMARKS.md
 ./tools/run_tfmbs_regression.sh
 ```
 
+### 📌 Reference integration
+
+```bash
+python3 tools/reference_integration.py
+```
+
+This script rebuilds `bin/mock_llama`, runs a CPU baseline, reruns it through `tools/tfmbs-run`, and writes the latency summary to `logs/reference_integration.csv` along with a small bar chart. The Fabric Illusion heuristics exercised here are captured in `docs/FABRIC_ILLUSION_CONTRACT.md`.
+
 `tools/run_tfmbs_regression.sh` automates the `cmake -B build -G Ninja` / `ninja -C build tfmbs_plugin` flow, locates `mlir-opt` (defaults to `../llvm-project/build-shared/bin/mlir-opt`), and then runs `tests/mlir/run_tfmbs_to_linalg.py` with the built plugin; set `LLVM_DIR`, `MLIR_DIR`, `BUILD_DIR`, `MLIR_OPT`, or `TFMBS_PLUGIN` before invoking the script to override the defaults so your environment mirrors CI.
 
 ## 📣 Public Readiness
@@ -39,7 +47,7 @@ Before the hardware racks (XC7Z020/XC7Z045) return, reference [`docs/PUBLIC_READ
 
 ## 🏗️ Architecture & Vision
 
-Ternary Fabric operates as a **semantic execution substrate**, not a library rewrite. It creates a *memory illusion layer* that migrates hot weights into ternary residency pools and offloads compute onto parallel Fabric Tiles.
+Ternary Fabric operates as a **semantic execution substrate**, not a library rewrite. It creates a *memory illusion layer* that migrates hot weights into ternary residency pools and offloads compute onto parallel Fabric Tiles. The Fabric Illusion contract is now captured in `docs/FABRIC_ILLUSION_CONTRACT.md` so reviewers can inspect exactly which allocations, signal handlers, and heuristics are part of the intercept.
 
 ### Core Innovations
 - **Zero-Skip:** Hardware suppression of clocking and memory access for zero-value operands.
@@ -76,7 +84,11 @@ The project has completed **Phase 25 (Simulated RDMA Multi-Node Orchestration)**
 | **Aggregated Fabric (4 Tiles)** | 60 | **30.0** | 66% |
 | **Projected (High-Density)** | 1024 | **512.0** | 65–72% |
 
-*Detailed metrics and terminology can be found in **[BENCHMARKS.md](BENCHMARKS.md)**.*
+Detailed throughput, density, and zero-skip numbers come from the Phase 21–25 measurement plane documented in **[BENCHMARKS.md](BENCHMARKS.md)**. The same cycle-aware cost model and economic efficiency definitions appear in `docs/18_WORKLOADS_METRICS.md`, so you can map “zero skip” counts to Fabric Cost directly.
+
+## 🧭 North-Star Metric
+
+Our north-star KPI is **zero-skip MACs avoided per Fabric Cost** (`zero_skips / fabric_cost`), borrowing its topology from `docs/18_WORKLOADS_METRICS.md`. It keeps the story on “work avoided vs. the energy proxy we already report” instead of chasing peak GOPS, and the `tools/reference_integration.py` helper makes a simple chart that showcases the delta between the CPU baseline and the intercept run.
 
 ---
 
@@ -86,6 +98,7 @@ The project has completed **Phase 25 (Simulated RDMA Multi-Node Orchestration)**
 - **[Roadmap](docs/ROADMAP.md):** Phase-by-phase progression and deliverables.
 - **[Whitepaper](WHITE_PAPER.md):** Technical narrative, architecture, and comparisons.
 - **[Benchmarks](BENCHMARKS.md):** Authoritative performance and resource metrics.
+- **[Fabric Illusion Contract](docs/FABRIC_ILLUSION_CONTRACT.md):** What the interposer intercepts, the guarantees it offers, and the safe failure modes we support.
 
 ## 🧪 Compiler Regression
 
