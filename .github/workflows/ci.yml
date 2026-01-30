@@ -55,6 +55,9 @@ jobs:
     - name: Build TFMBS plugin
       run: ninja -C build tfmbs_plugin TfmbsPassTest
 
+    - name: Run TFMBS lit regression
+      run: ninja -C build check-tfmbs
+
     - name: Emit Torch/ONNX MLIR
       run: python tools/torch_to_tfmbs.py --emit tests/mlir/torch_tfmbs.mlir
 
@@ -67,6 +70,10 @@ jobs:
           --mlir-opt=llvm-project/build-shared/bin/mlir-opt \
           --plugin=build/libtfmbs_plugin.so \
           --mlir=tests/mlir/torch_tfmbs.mlir
+        python3 tests/mlir/run_tfmbs_to_linalg.py \
+          --mlir-opt=llvm-project/build-shared/bin/mlir-opt \
+          --plugin=build/libtfmbs_plugin.so \
+          --mlir=tests/mlir/tfmbs_multi_fusion.mlir
         python3 tests/mlir/run_tfmbs_to_linalg.py \
           --mlir-opt=llvm-project/build-shared/bin/mlir-opt \
           --plugin=build/libtfmbs_plugin.so \

@@ -164,6 +164,8 @@ Establishing TFMBS as a first-class citizen in the MLIR/LLVM ecosystem to enable
   - `pytfmbs.TFMBSLinear.telemetry_hint` mirrors the same dictionary (layer name, sparsity, tile mask) so Python front ends can emit the compile-time hints that the Adaptive Runtime Agent consumes later.
   - **CI regression:** GitHub Actions clones `llvm/llvm-project`, builds shared MLIR, runs `tools/torch_to_tfmbs.py`, and executes `tests/mlir/run_tfmbs_to_linalg.py` with the dialect plugin to guarantee `linalg.matmul` is present before every merge.
   - **Operator Fusion:** `TfmbsFusionPass` now collapses telemetry-aligned GEMV pairs into `tfmbs.fused_gemv`, the fusion pass is exercised by `tests/mlir/tfmbs_fusion.mlir`, and CI runs the fusion+lowering pipeline so fused kernels still output `linalg.matmul`.
+  - **Multi-stage coverage:** CI also runs `tests/mlir/tfmbs_multi_fusion.mlir` to show the fusion pass covers longer pipelines while preserving telemetry hints.
+  - **Adaptive dashboard:** `pytfmbs.AdaptiveRuntimeAgent` logs fusion telemetry so `tools/adaptive_dashboard.py` can compare runtime fusion_order/fusion_sparsity trends against the compiler hints for Phase 26 scheduling.
   - **Compiler Plan:** See `docs/compiler_track_plan.md` for the current MLIR dialect status, TableGen targets, and next work items while hardware verification is pending.
 
 **Phase 26: Dynamic Semantic Scheduling & Precision Adaptation** ✅

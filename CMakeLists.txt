@@ -39,6 +39,12 @@ add_executable(TfmbsPassTest tests/mlir/TfmbsPassTest.cpp)
 target_include_directories(TfmbsPassTest PRIVATE src/mlir)
 target_link_libraries(TfmbsPassTest PRIVATE tfmbs_dialect)
 
+add_lit_testsuite(check-tfmbs "Running TFMBS MLIR regression tests"
+  ${CMAKE_CURRENT_SOURCE_DIR}/tests/mlir/lit.cfg
+  PARAMS BINARY_DIR=${CMAKE_BINARY_DIR}
+  DEPENDS TfmbsPassTest
+)
+
 add_mlir_library(tfmbs_plugin SHARED
   src/mlir/TfmbsPassPlugin.cpp
   LINK_LIBS PUBLIC

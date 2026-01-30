@@ -84,8 +84,10 @@ The project has completed **Phase 25 (Simulated RDMA Multi-Node Orchestration)**
     --plugin=build/libtfmbs_plugin.dylib
   ```
   The script loads the tfmbs plugin as a dialect plugin before running `--pass-pipeline="builtin.module(tfmbs-to-linalg)"` so the update guardrails detect when `linalg.matmul` disappears or when tfmbs ops leak into the lowered IR. Set `MLIR_OPT` for alternate builds or wrap this invocation into CI.
+- **Comprehensive lit guard:** `ninja -C build check-tfmbs` runs the `tests/mlir/lit.cfg` suite (custom `tfmbs_fusion_regression.mlir`/`tfmbs_multi_fusion_regression.mlir`) that uses the same regression helper to ensure both single-stage and multi-stage fusion traces lower cleanly while preserving telemetry metadata.
 - **CI coverage:** GitHub Actions now performs the shared-MLIR build, runs `tools/torch_to_tfmbs.py` to regenerate the telemetry-rich Torch fixture, and executes `tests/mlir/run_tfmbs_to_linalg.py` (default + Torch fixture) with the dialect plugin so every merge confirms `linalg.matmul` appears even when telemetry metadata is present.
 - **Operator fusion regression:** The CI job additionally runs `tests/mlir/run_tfmbs_to_linalg.py --mlir=tests/mlir/tfmbs_fusion.mlir` so the new `tfmbs-fuse` pass can combine sequential GEMV kernels before lowering and still emit `linalg.matmul`.
+- **Fusion dashboard:** Use `pytfmbs.AdaptiveRuntimeAgent.save_history("logs/adaptive_history.json")` after running workloads, then run `tools/adaptive_dashboard.py` to compare `fusion_order`/`fusion_sparsity` against the compiler hints stored in `tests/mlir/torch_tfmbs.mlir`.
 
 ---
 

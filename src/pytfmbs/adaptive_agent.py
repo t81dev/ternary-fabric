@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+import json
+from pathlib import Path
+from typing import Any, Dict, Iterable, List
 
 
 class AdaptiveRuntimeAgent:
@@ -23,3 +25,20 @@ class AdaptiveRuntimeAgent:
         }
         self.telemetry_history.append(entry)
         return entry
+
+    def save_history(self, path: str | Path) -> None:
+        """Persist the telemetry history for dashboards."""
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("w", encoding="utf-8") as handle:
+            json.dump(self.telemetry_history, handle, indent=2)
+
+    @classmethod
+    def load_history(cls, path: str | Path) -> List[Dict[str, Any]]:
+        """Read a previously saved telemetry history."""
+        with Path(path).open("r", encoding="utf-8") as handle:
+            return json.load(handle)
+
+    def extend_history(self, entries: Iterable[Dict[str, Any]]) -> None:
+        """Merge other telemetry entries into the agent history."""
+        self.telemetry_history.extend(entries)

@@ -98,6 +98,21 @@ def test_adaptive_agent_consumes_fusion_hints():
     assert agent_hint_runtime["fusion_order"] == runtime_hint["fusion_order"]
 
 
+def test_agent_records_multi_stage_hints():
+    fabric = Fabric()
+    l1 = TFMBSLinear(4, 4, fabric=fabric, name="stage_a")
+    l2 = TFMBSLinear(4, 4, fabric=fabric, name="stage_b")
+    l3 = TFMBSLinear(4, 2, fabric=fabric, name="stage_c")
+    seq = TFMBSSequential(l1, l2, l3)
+    agent = AdaptiveRuntimeAgent()
+    multi_hint = seq.telemetry_hint()
+    entry = agent.consume(multi_hint)
+    assert entry["fusion_order"] == ["stage_a", "stage_b", "stage_c"]
+    assert entry["fusion_sparsity"] >= 0.0
+    assert agent.telemetry_history[-1]["fusion_sparsity"] == entry["fusion_sparsity"]
+    assert len(agent.telemetry_history) == 1
+
+
 def test_linear_telemetry_hint():
     fabric = Fabric()
     layer = TFMBSLinear(4, 8, fabric=fabric, name="telemetry_test")

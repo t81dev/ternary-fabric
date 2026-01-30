@@ -3,9 +3,10 @@
 This living report captures the FPGA verification data required to graduate Phase 10 from the “Mock” driver state, proving the Silicon Reality milestone (Q3 2026) and enabling downstream Track updates.
 
 ## 1. Summary
-- **Verification window:** YYYY-MM-DD to YYYY-MM-DD  
-- **Hardware target:** XC7Z020 / XC7Z045 (specify board, bitstream hash)  
-- **Driver path:** `/dev/tfmbs` via `libtfmbs_device.so` and `tfmbs_driver_mock.c`  
+- **Verification window:** TBD (waiting for XC7Z020/XC7Z045 access)
+- **Hardware target:** XC7Z020 / XC7Z045 (specify board, bitstream hash once built)
+- **Driver path:** `/dev/tfmbs` via `libtfmbs_device.so` and `tfmbs_driver_mock.c`
+- **Current status:** Hardware verification remains blocked because the physical FPGA testbeds are unavailable; the compiler/MLIR stack (dialect, fusion telemetry, regression scripts) is ready and will provide the telemetry dictionary once DMA/IOCTL validation resumes.
 - **Key outcome:** [ ] DMA topology validated  [ ] Telemetry matches emulator  [ ] >50× efficiency proven
 
 ## 2. RTL Synthesis & Bitstream
@@ -37,6 +38,12 @@ This living report captures the FPGA verification data required to graduate Phas
 - **Open hardware issues:** maintain list with severity, steps to reproduce, component owner, status.  
 - **Next actions:** e.g., refine driver handshake, adjust telemetry scaling, rerun `benchmarks/sparse_stress.c`, update ROADMAP.  
 - **Stakeholder alignment:** who needs the results (compiler/MLIR team, RDMA track leads) and how the findings will be shared.
+
+## 7. Preparation for Hardware Reconnection
+- **Synthesis command:** rerun the platform flow (e.g., `make -C src/hw synth-fabric TARGET=xc7z020 PLATFORM=zc706`) to regenerate `ternary_fabric_top.bit`, capture LUT/FF/BRAM counts, and compute the checksum/hash for the artifact you will flash.
+- **Flash & bring-up:** document the Vivado/SDK steps that load the bitstream (for example `vivado -mode batch -source scripts/flash_ternary.tcl -tclargs /path/to/ternary_fabric_top.bit`) along with board-specific boot sequences or PRC knobs required on the Zynq side.
+- **Driver run plan:** once the board is powered, execute `tests/test_dma_driver` followed by the mock driver’s submit routine (e.g., `./bin/tfmbs_driver_mock --submit-dma`), observe `[TFMBS-Driver] DMA IRQ` logs, and verify descriptor head/tail updates; capture any env vars like `TFMBS_DMA_RING=512` and `TFMBS_VERBOSE=1` you used.
+- **Telemetry re-sync:** rerun `python tools/torch_to_tfmbs.py && python tests/mlir/run_tfmbs_to_linalg.py --mlir=tests/mlir/tfmbs_to_linalg.mlir` with the shared MLIR build to regenerate telemetry dictionaries, then diff the CSV output (e.g., `diag/telemetry_YYYYMMDD.csv`) against emulator baselines using `tools/telemetry_diff.py` before and after the hardware run.
 
 ## Attachments
 - Reference docs: `docs/ROADMAP.md`, `docs/FPGA_VERIFICATION_CHECKLIST.md`, `include/uapi_tfmbs.h`, `src/tfmbs_driver_mock.c`.  

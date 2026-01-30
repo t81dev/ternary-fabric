@@ -2,6 +2,11 @@
 
 Based on the ROADMAP Phase 22 callout in `docs/ROADMAP.md` (Hardware Sovereignty track), this checklist captures the immediate verification work needed to move beyond the mock driver and validate the bitstream + DMA/IOCTL path on the XC7Z020/XC7Z045 boards.
 
+## Status Snapshot & Current Constraints
+- **Compiler/MLIR readiness:** the TFMBS dialect, `TfmbsToLinalg` pass, fusion telemetry metadata, and regression scripts now run via the shared LLVM/MLIR build and `mlir-opt`, so the software stack already emits the fused dictionary telemetry the adaptive pipeline expects even without hardware.
+- **Hardware gating:** the remaining physical verification steps (RTL synthesis, flashing, driver DMA runs, telemetry capture) await the XC7Z020/XC7Z045 testbeds; the checklist below records the outstanding action items so we can resume immediately once the boards are available.
+
+
 ## 1. Source Inventory
 - RTL files under `src/hw/` (`ternary_fabric_top.v`, `vector_engine.v`, `ternary_lane_alu.v`, `frame_controller.v`, `axi_interconnect_v1.v`, `ternary_sram_wrapper.v`, `ternary_sram_dense.v`, PT-5 support, and TBs) define the tile/lanes and DMA path that must map onto the PCIe/ioctl handshake.
 - Mock driver (`src/tfmbs_driver_mock.c`) and UAPI (`include/uapi_tfmbs.h`) describe the current `/dev/tfmbs` behaviors, including `TFMBS_IOC_SUBMIT_DMA` descriptors that route payloads into `emu_*` helpers and the ring buffer logic.
@@ -11,8 +16,12 @@ Based on the ROADMAP Phase 22 callout in `docs/ROADMAP.md` (Hardware Sovereignty
 ## 2. Bitstream & DMA Integration
 1. Confirm the RTL hierarchy in `src/hw/ternary_fabric_top.v` instantiates the DMA interface noted in the roadmaps (producer-consumer ring buffer, asynchronous interrupts on descriptor completion, support for `TFMBS_IOC_SUBMIT_DMA` flags).
 2. Synthesize the current RTL (use existing `Makefile`/build scripts if available) targeting XC7Z020/XC7Z045 and capture timing/power reports. Document whether the generated bitstream matches the `ternary_fabric_top` IO interface used by `libtfmbs_device.so`.
+   - **Suggested flow:** invoke `vivado -mode batch -source tools/synth.tcl -tclargs xc7z020 /path/to/output/ternary_fabric_top.bit` (adjust the vendor device and output path). Capture `vivado.log` along with reported LUT/FF/BRAM counts and `clock_period` for reference.
+   - **Register validation:** run `python tools/validate_register_map.py --rtl include/tfmbs_dma_regs.h docs/04_MEMORY_MAP.md` before and after synthesis to ensure the RTL register offsets still match the canonical map that `src/tfmbs_driver_mock.c` expects.
 3. Update or draft the DMA descriptor placement so the driver’s ring (`src/tfmbs_driver_mock.c`) matches the RTL-level register map (addresses for descriptor head/tail, control registers, IRQ lines).
 4. Program the FPGA with the synthesized bitstream, and run the mock driver’s IOCTL flow against `/dev/tfmbs` to ensure that submitting DMA descriptors results in the expected host-device transfers (monitor the host log for `[TFMBS-Driver] DMA IRQ` and check descriptor counts).
+   - **Flashing template:** keep a reusable command such as `vivado -mode batch -source scripts/flash_ternary.tcl -tclargs /path/to/ternary_fabric_top.bit` and note any board-specific DDR init macros needed for the XC7Z020/XC7Z045 shells.
+   - **DMA smoke test:** after flashing, run `tests/test_dma_driver` (with `TFMBS_DMA_RING` env var set to the desired queue depth) and the mock driver’s submit CLI; expect each `TFMBS_IOC_SUBMIT_DMA` call to log a descriptor completion before proceeding.
 
 ## 3. Hardware-in-the-Loop Validation
 - **Driver validation:** run `tests/test_dma_driver.c` (or similar) using the real kernel module or the mock driver wrapped around the hardware to ensure `TFMBS_IOC_SUBMIT_DMA` returns 0 and the ring does not overflow under high load.
