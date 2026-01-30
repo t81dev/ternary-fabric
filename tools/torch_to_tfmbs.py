@@ -73,7 +73,8 @@ def collect_matmuls(model_path: Path) -> tuple[list[dict], list[int | None]]:
             continue
         out_features, in_features = weights.shape
         batch = input_dims.get(node.input[0], [None])[0]
-        sparsity = float(np.count_nonzero(weights == 0)) / weights.size
+        zero_count = int(np.count_nonzero(weights == 0))
+        sparsity = float(zero_count) / weights.size
         tile_count = math.ceil(out_features / LANES_PER_TILE) if out_features else 0
         tile_mask = (1 << tile_count) - 1 if tile_count else 0
         matmul_infos.append({
@@ -83,6 +84,8 @@ def collect_matmuls(model_path: Path) -> tuple[list[dict], list[int | None]]:
             "batch_dim": batch,
             "sparsity": sparsity,
             "tile_mask": tile_mask,
+            "zero_count": zero_count,
+            "total": int(weights.size),
         })
     return matmul_infos, input_dims.get("input", [])
 
@@ -92,7 +95,7 @@ def build_mlir(matmuls: list[dict], input_dims: list[int | None]) -> str:
     args: list[tuple[str, str]] = []
 
     for i, info in enumerate(matmuls):
-        args.append((f"%w{i}", memref_type([info["out_features"], info["in_features"]])))
+        args.append((f"%w{i}", memref_type([info["in_features"], info["out_features"]])))
 
     input_type = memref_type(input_dims)
     args.append(("%input", input_type))
@@ -105,13 +108,21 @@ def build_mlir(matmuls: list[dict], input_dims: list[int | None]) -> str:
     lines.append(f"  func.func @torch_tfmbs({signature}) {{")
 
     prev_input = "%input"
+    arg_types = {name: typ for name, typ in args}
+    fusion_order = [info["label"] for info in matmuls]
+    total_zero = sum(info["zero_count"] for info in matmuls)
+    total_elements = sum(info["total"] for info in matmuls)
+    fusion_sparsity = float(total_zero) / float(total_elements) if total_elements else 0.0
+    fusion_order_str = ", ".join(f"\"{name}\"" for name in fusion_order)
     for idx, info in enumerate(matmuls):
         telemetry = (
             f"{{layer = \"{info['label']}\", sparsity = {info['sparsity']:.4f}, "
-            f"tile_mask = {info['tile_mask']}}}"
+            f"tile_mask = {info['tile_mask']}, fusion_order = [{fusion_order_str}], fusion_sparsity = {fusion_sparsity:.4f}}}"
         )
         lines.append(
-            f"    tfmbs.gemv %w{idx}, {prev_input}, %out{idx} {{tile_mask = {info['tile_mask']}, telemetry = {telemetry}}}"
+            f"    tfmbs.gemv %w{idx} : {arg_types[f'%w{idx}']}, "
+            f"{prev_input} : {arg_types[prev_input]}, "
+            f"%out{idx} : {arg_types[f'%out{idx}']} {{tile_mask = {info['tile_mask']}, telemetry = {telemetry}}}"
         )
         prev_input = f"%out{idx}"
 

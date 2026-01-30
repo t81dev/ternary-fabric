@@ -58,3 +58,18 @@ def TfmbsGemvOp : TfmbsOp<"gemv"> {
   );
   let assemblyFormat = "$weight `:` type($weight) `,` $input `:` type($input) `,` $output `:` type($output) attr-dict";
 }
+
+def TfmbsFusedGemvOp : TfmbsOp<"fused_gemv"> {
+  let summary = "Fuse sequential GEMV kernels that share telemetry hints.";
+  let arguments = (ins
+    Variadic<AnyType>:$operands,
+    DefaultValuedOptionalAttr<I64Attr, "0">:$tile_mask,
+    OptionalAttr<ArrayAttr>:$telemetry
+  );
+  let description = [{
+    Represents a batch of GEMV kernels that share the same tile mask
+    and telemetry attributes, allowing the fusion pass to collapse
+    several kernels into a single scheduling unit.
+    The `operands` are a repeating sequence of weight/input/output for each stage.
+  }];
+}

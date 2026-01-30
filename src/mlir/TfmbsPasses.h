@@ -11,6 +11,7 @@ namespace mlir {
 namespace tfmbs {
 
 std::unique_ptr<::mlir::Pass> createTfmbsToLinalgPass();
+std::unique_ptr<::mlir::Pass> createTfmbsFusionPass();
 
 void registerTfmbsPasses();
 

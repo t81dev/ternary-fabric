@@ -11,6 +11,7 @@
 #undef GET_OP_LIST
 
 ::mlir::tfmbs::TfmbsDmaLoadOp,
+::mlir::tfmbs::TfmbsFusedGemvOp,
 ::mlir::tfmbs::TfmbsGemvOp,
 ::mlir::tfmbs::TfmbsPackOp,
 ::mlir::tfmbs::TfmbsTransferOp
@@ -35,6 +36,16 @@ static ::llvm::LogicalResult __mlir_ods_local_type_constraint_TfmbsOps1(
   return ::mlir::success();
 }
 
+static ::llvm::LogicalResult __mlir_ods_local_type_constraint_TfmbsOps2(
+    ::mlir::Operation *op, ::mlir::Type type, ::llvm::StringRef valueKind,
+    unsigned valueIndex) {
+  if (!((true))) {
+    return op->emitOpError(valueKind) << " #" << valueIndex
+        << " must be variadic of any type, but got " << type;
+  }
+  return ::mlir::success();
+}
+
 static ::llvm::LogicalResult __mlir_ods_local_attr_constraint_TfmbsOps1(
     ::mlir::Attribute attr, ::llvm::StringRef attrName, llvm::function_ref<::mlir::InFlightDiagnostic()> emitError) {
   if (attr && !(((::llvm::isa<::mlir::IntegerAttr>(attr))) && ((::llvm::cast<::mlir::IntegerAttr>(attr).getType().isSignlessInteger(64)))))
@@ -51,14 +62,28 @@ static ::llvm::LogicalResult __mlir_ods_local_attr_constraint_TfmbsOps1(
 
 static ::llvm::LogicalResult __mlir_ods_local_attr_constraint_TfmbsOps2(
     ::mlir::Attribute attr, ::llvm::StringRef attrName, llvm::function_ref<::mlir::InFlightDiagnostic()> emitError) {
-  if (attr && !((::llvm::isa<::mlir::DictionaryAttr>(attr))))
+  if (attr && !((::llvm::isa<::mlir::ArrayAttr>(attr))))
     return emitError() << "attribute '" << attrName
-        << "' failed to satisfy constraint: dictionary of named attribute values";
+        << "' failed to satisfy constraint: array attribute";
   return ::mlir::success();
 }
 static ::llvm::LogicalResult __mlir_ods_local_attr_constraint_TfmbsOps2(
     ::mlir::Operation *op, ::mlir::Attribute attr, ::llvm::StringRef attrName) {
   return __mlir_ods_local_attr_constraint_TfmbsOps2(attr, attrName, [op]() {
+    return op->emitOpError();
+  });
+}
+
+static ::llvm::LogicalResult __mlir_ods_local_attr_constraint_TfmbsOps3(
+    ::mlir::Attribute attr, ::llvm::StringRef attrName, llvm::function_ref<::mlir::InFlightDiagnostic()> emitError) {
+  if (attr && !((::llvm::isa<::mlir::DictionaryAttr>(attr))))
+    return emitError() << "attribute '" << attrName
+        << "' failed to satisfy constraint: dictionary of named attribute values";
+  return ::mlir::success();
+}
+static ::llvm::LogicalResult __mlir_ods_local_attr_constraint_TfmbsOps3(
+    ::mlir::Operation *op, ::mlir::Attribute attr, ::llvm::StringRef attrName) {
+  return __mlir_ods_local_attr_constraint_TfmbsOps3(attr, attrName, [op]() {
     return op->emitOpError();
   });
 }
@@ -309,6 +334,469 @@ namespace mlir::tfmbs {
 
 
 //===----------------------------------------------------------------------===//
+// ::mlir::tfmbs::TfmbsFusedGemvOp definitions
+//===----------------------------------------------------------------------===//
+
+namespace detail {
+
+TfmbsFusedGemvOpGenericAdaptorBase::TfmbsFusedGemvOpGenericAdaptorBase(TfmbsFusedGemvOp op) : odsAttrs(op->getRawDictionaryAttrs()), odsOpName(op->getName()), properties(op.getProperties()), odsRegions(op->getRegions()) {}
+
+std::pair<unsigned, unsigned> TfmbsFusedGemvOpGenericAdaptorBase::getODSOperandIndexAndLength(unsigned index, unsigned odsOperandsSize) {
+  bool isVariadic[] = {true};
+  int prevVariadicCount = 0;
+  for (unsigned i = 0; i < index; ++i)
+    if (isVariadic[i]) ++prevVariadicCount;
+
+  // Calculate how many dynamic values a static variadic operand corresponds to.
+  // This assumes all static variadic operands have the same dynamic value count.
+  int variadicSize = (odsOperandsSize - 0) / 1;
+  // `index` passed in as the parameter is the static index which counts each
+  // operand (variadic or not) as size 1. So here for each previous static variadic
+  // operand, we need to offset by (variadicSize - 1) to get where the dynamic
+  // value pack for this static operand starts.
+  int start = index + (variadicSize - 1) * prevVariadicCount;
+  int size = isVariadic[index] ? variadicSize : 1;
+  return {start, size};
+}
+
+::mlir::IntegerAttr TfmbsFusedGemvOpGenericAdaptorBase::getTileMaskAttr() {
+  auto attr = ::llvm::dyn_cast_or_null<::mlir::IntegerAttr>(getProperties().tile_mask);
+  if (!attr)
+    attr = ::mlir::Builder(odsAttrs.getContext()).getIntegerAttr(::mlir::Builder(odsAttrs.getContext()).getIntegerType(64), 0);
+  return attr;
+}
+
+uint64_t TfmbsFusedGemvOpGenericAdaptorBase::getTileMask() {
+  auto attr = getTileMaskAttr();
+    if (!attr)
+      return ::mlir::Builder(odsAttrs.getContext()).getIntegerAttr(::mlir::Builder(odsAttrs.getContext()).getIntegerType(64), 0).getValue().getZExtValue();
+  return attr.getValue().getZExtValue();
+}
+
+::std::optional< ::mlir::ArrayAttr > TfmbsFusedGemvOpGenericAdaptorBase::getTelemetry() {
+  auto attr = getTelemetryAttr();
+  return attr ? ::std::optional< ::mlir::ArrayAttr >(attr) : (::std::nullopt);
+}
+
+
+} // namespace detail
+TfmbsFusedGemvOpAdaptor::TfmbsFusedGemvOpAdaptor(TfmbsFusedGemvOp op) : TfmbsFusedGemvOpGenericAdaptor(op->getOperands(), op) {}
+
+::llvm::LogicalResult TfmbsFusedGemvOpAdaptor::verify(::mlir::Location loc) {
+  auto tblgen_telemetry = getProperties().telemetry; (void)tblgen_telemetry;
+  auto tblgen_tile_mask = getProperties().tile_mask; (void)tblgen_tile_mask;
+
+  if (tblgen_tile_mask && !(((::llvm::isa<::mlir::IntegerAttr>(tblgen_tile_mask))) && ((::llvm::cast<::mlir::IntegerAttr>(tblgen_tile_mask).getType().isSignlessInteger(64)))))
+    return emitError(loc, "'tfmbs.fused_gemv' op attribute 'tile_mask' failed to satisfy constraint: 64-bit signless integer attribute");
+
+  if (tblgen_telemetry && !((::llvm::isa<::mlir::ArrayAttr>(tblgen_telemetry))))
+    return emitError(loc, "'tfmbs.fused_gemv' op attribute 'telemetry' failed to satisfy constraint: array attribute");
+  return ::mlir::success();
+}
+
+std::pair<unsigned, unsigned> TfmbsFusedGemvOp::getODSOperandIndexAndLength(unsigned index) {
+  bool isVariadic[] = {true};
+  int prevVariadicCount = 0;
+  for (unsigned i = 0; i < index; ++i)
+    if (isVariadic[i]) ++prevVariadicCount;
+
+  // Calculate how many dynamic values a static variadic operand corresponds to.
+  // This assumes all static variadic operands have the same dynamic value count.
+  int variadicSize = (getOperation()->getNumOperands() - 0) / 1;
+  // `index` passed in as the parameter is the static index which counts each
+  // operand (variadic or not) as size 1. So here for each previous static variadic
+  // operand, we need to offset by (variadicSize - 1) to get where the dynamic
+  // value pack for this static operand starts.
+  int start = index + (variadicSize - 1) * prevVariadicCount;
+  int size = isVariadic[index] ? variadicSize : 1;
+  return {start, size};
+}
+
+::mlir::MutableOperandRange TfmbsFusedGemvOp::getOperandsMutable() {
+  auto range = getODSOperandIndexAndLength(0);
+  auto mutableRange = ::mlir::MutableOperandRange(getOperation(), range.first, range.second);
+  return mutableRange;
+}
+
+::llvm::LogicalResult TfmbsFusedGemvOp::setPropertiesFromAttr(Properties &prop, ::mlir::Attribute attr, ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError) {
+  ::mlir::DictionaryAttr dict = ::llvm::dyn_cast<::mlir::DictionaryAttr>(attr);
+  if (!dict) {
+    emitError() << "expected DictionaryAttr to set properties";
+    return ::mlir::failure();
+  }
+
+  {
+    auto &propStorage = prop.telemetry;
+       auto attr = dict.get("telemetry");
+    if (attr) {
+      auto convertedAttr = ::llvm::dyn_cast<std::remove_reference_t<decltype(propStorage)>>(attr);
+      if (convertedAttr) {
+        propStorage = convertedAttr;
+      } else {
+        emitError() << "Invalid attribute `telemetry` in property conversion: " << attr;
+        return ::mlir::failure();
+      }
+    }
+  }
+
+  {
+    auto &propStorage = prop.tile_mask;
+       auto attr = dict.get("tile_mask");
+    if (attr) {
+      auto convertedAttr = ::llvm::dyn_cast<std::remove_reference_t<decltype(propStorage)>>(attr);
+      if (convertedAttr) {
+        propStorage = convertedAttr;
+      } else {
+        emitError() << "Invalid attribute `tile_mask` in property conversion: " << attr;
+        return ::mlir::failure();
+      }
+    }
+  }
+  return ::mlir::success();
+}
+
+::mlir::Attribute TfmbsFusedGemvOp::getPropertiesAsAttr(::mlir::MLIRContext *ctx, const Properties &prop) {
+    ::mlir::SmallVector<::mlir::NamedAttribute> attrs;
+    ::mlir::Builder odsBuilder{ctx};
+
+    {
+      const auto &propStorage = prop.telemetry;
+      if (propStorage)
+        attrs.push_back(odsBuilder.getNamedAttr("telemetry",
+                                       propStorage));
+    }
+
+    {
+      const auto &propStorage = prop.tile_mask;
+      if (propStorage)
+        attrs.push_back(odsBuilder.getNamedAttr("tile_mask",
+                                       propStorage));
+    }
+
+  if (!attrs.empty())
+    return odsBuilder.getDictionaryAttr(attrs);
+  return {};
+}
+
+llvm::hash_code TfmbsFusedGemvOp::computePropertiesHash(const Properties &prop) {
+  using llvm::hash_value;
+  return llvm::hash_combine(
+    llvm::hash_value(prop.telemetry.getAsOpaquePointer()), 
+    llvm::hash_value(prop.tile_mask.getAsOpaquePointer()));
+}
+
+std::optional<mlir::Attribute> TfmbsFusedGemvOp::getInherentAttr(::mlir::MLIRContext *ctx, const Properties &prop, llvm::StringRef name) {
+    if (name == "telemetry")
+      return prop.telemetry;
+
+    if (name == "tile_mask")
+      return prop.tile_mask;
+  return std::nullopt;
+}
+
+void TfmbsFusedGemvOp::setInherentAttr(Properties &prop, llvm::StringRef name, mlir::Attribute value) {
+    if (name == "telemetry") {
+       prop.telemetry = ::llvm::dyn_cast_or_null<std::remove_reference_t<decltype(prop.telemetry)>>(value);
+       return;
+    }
+
+    if (name == "tile_mask") {
+       prop.tile_mask = ::llvm::dyn_cast_or_null<std::remove_reference_t<decltype(prop.tile_mask)>>(value);
+       return;
+    }
+}
+
+void TfmbsFusedGemvOp::populateInherentAttrs(::mlir::MLIRContext *ctx, const Properties &prop, ::mlir::NamedAttrList &attrs) {
+    if (prop.telemetry) attrs.append("telemetry", prop.telemetry);
+
+    if (prop.tile_mask) attrs.append("tile_mask", prop.tile_mask);
+}
+
+::llvm::LogicalResult TfmbsFusedGemvOp::verifyInherentAttrs(::mlir::OperationName opName, ::mlir::NamedAttrList &attrs, llvm::function_ref<::mlir::InFlightDiagnostic()> emitError) {
+    {
+      ::mlir::Attribute attr = attrs.get(getTelemetryAttrName(opName));
+      if (attr && ::mlir::failed(__mlir_ods_local_attr_constraint_TfmbsOps2(attr, "telemetry", emitError)))
+        return ::mlir::failure();
+    }
+
+    {
+      ::mlir::Attribute attr = attrs.get(getTileMaskAttrName(opName));
+      if (attr && ::mlir::failed(__mlir_ods_local_attr_constraint_TfmbsOps1(attr, "tile_mask", emitError)))
+        return ::mlir::failure();
+    }
+    return ::mlir::success();
+}
+
+::llvm::LogicalResult TfmbsFusedGemvOp::readProperties(::mlir::DialectBytecodeReader &reader, ::mlir::OperationState &state) {
+  auto &prop = state.getOrAddProperties<Properties>(); (void)prop;
+  if (::mlir::failed(reader.readOptionalAttribute(prop.telemetry)))
+    return ::mlir::failure();
+
+  if (::mlir::failed(reader.readOptionalAttribute(prop.tile_mask)))
+    return ::mlir::failure();
+  return ::mlir::success();
+}
+
+void TfmbsFusedGemvOp::writeProperties(::mlir::DialectBytecodeWriter &writer) {
+  auto &prop = getProperties(); (void)prop;
+
+  writer.writeOptionalAttribute(prop.telemetry);
+
+  writer.writeOptionalAttribute(prop.tile_mask);
+}
+
+uint64_t TfmbsFusedGemvOp::getTileMask() {
+  auto attr = getTileMaskAttr();
+    if (!attr)
+      return ::mlir::Builder((*this)->getContext()).getIntegerAttr(::mlir::Builder((*this)->getContext()).getIntegerType(64), 0).getValue().getZExtValue();
+  return attr.getValue().getZExtValue();
+}
+
+::std::optional< ::mlir::ArrayAttr > TfmbsFusedGemvOp::getTelemetry() {
+  auto attr = getTelemetryAttr();
+  return attr ? ::std::optional< ::mlir::ArrayAttr >(attr) : (::std::nullopt);
+}
+
+void TfmbsFusedGemvOp::setTileMask(::std::optional<uint64_t> attrValue) {
+    auto &odsProp = getProperties().tile_mask;
+    if (attrValue)
+      odsProp = ::mlir::Builder((*this)->getContext()).getIntegerAttr(::mlir::Builder((*this)->getContext()).getIntegerType(64), *attrValue);
+    else
+      odsProp = nullptr;
+}
+
+void TfmbsFusedGemvOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::ValueRange operands, /*optional*/::mlir::IntegerAttr tile_mask, /*optional*/::mlir::ArrayAttr telemetry) {
+  odsState.addOperands(operands);
+  if (tile_mask) {
+    odsState.getOrAddProperties<Properties>().tile_mask = tile_mask;
+  }
+  if (telemetry) {
+    odsState.getOrAddProperties<Properties>().telemetry = telemetry;
+  }
+}
+
+TfmbsFusedGemvOp TfmbsFusedGemvOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::ValueRange operands, /*optional*/::mlir::IntegerAttr tile_mask, /*optional*/::mlir::ArrayAttr telemetry) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, std::forward<decltype(operands)>(operands), std::forward<decltype(tile_mask)>(tile_mask), std::forward<decltype(telemetry)>(telemetry));
+  auto __res__ = ::llvm::dyn_cast<TfmbsFusedGemvOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+TfmbsFusedGemvOp TfmbsFusedGemvOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::ValueRange operands, /*optional*/::mlir::IntegerAttr tile_mask, /*optional*/::mlir::ArrayAttr telemetry) {
+  return create(builder, builder.getLoc(), std::forward<decltype(operands)>(operands), std::forward<decltype(tile_mask)>(tile_mask), std::forward<decltype(telemetry)>(telemetry));
+}
+
+void TfmbsFusedGemvOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, /*optional*/::mlir::IntegerAttr tile_mask, /*optional*/::mlir::ArrayAttr telemetry) {
+  odsState.addOperands(operands);
+  if (tile_mask) {
+    odsState.getOrAddProperties<Properties>().tile_mask = tile_mask;
+  }
+  if (telemetry) {
+    odsState.getOrAddProperties<Properties>().telemetry = telemetry;
+  }
+  assert(resultTypes.size() == 0u && "mismatched number of results");
+  odsState.addTypes(resultTypes);
+}
+
+TfmbsFusedGemvOp TfmbsFusedGemvOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, /*optional*/::mlir::IntegerAttr tile_mask, /*optional*/::mlir::ArrayAttr telemetry) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, std::forward<decltype(resultTypes)>(resultTypes), std::forward<decltype(operands)>(operands), std::forward<decltype(tile_mask)>(tile_mask), std::forward<decltype(telemetry)>(telemetry));
+  auto __res__ = ::llvm::dyn_cast<TfmbsFusedGemvOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+TfmbsFusedGemvOp TfmbsFusedGemvOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, /*optional*/::mlir::IntegerAttr tile_mask, /*optional*/::mlir::ArrayAttr telemetry) {
+  return create(builder, builder.getLoc(), std::forward<decltype(resultTypes)>(resultTypes), std::forward<decltype(operands)>(operands), std::forward<decltype(tile_mask)>(tile_mask), std::forward<decltype(telemetry)>(telemetry));
+}
+
+void TfmbsFusedGemvOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::ValueRange operands, /*optional*/uint64_t tile_mask, /*optional*/::mlir::ArrayAttr telemetry) {
+  odsState.addOperands(operands);
+  odsState.getOrAddProperties<Properties>().tile_mask = odsBuilder.getIntegerAttr(odsBuilder.getIntegerType(64), tile_mask);
+  if (telemetry) {
+    odsState.getOrAddProperties<Properties>().telemetry = telemetry;
+  }
+}
+
+TfmbsFusedGemvOp TfmbsFusedGemvOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::ValueRange operands, /*optional*/uint64_t tile_mask, /*optional*/::mlir::ArrayAttr telemetry) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, std::forward<decltype(operands)>(operands), std::forward<decltype(tile_mask)>(tile_mask), std::forward<decltype(telemetry)>(telemetry));
+  auto __res__ = ::llvm::dyn_cast<TfmbsFusedGemvOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+TfmbsFusedGemvOp TfmbsFusedGemvOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::ValueRange operands, /*optional*/uint64_t tile_mask, /*optional*/::mlir::ArrayAttr telemetry) {
+  return create(builder, builder.getLoc(), std::forward<decltype(operands)>(operands), std::forward<decltype(tile_mask)>(tile_mask), std::forward<decltype(telemetry)>(telemetry));
+}
+
+void TfmbsFusedGemvOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, /*optional*/uint64_t tile_mask, /*optional*/::mlir::ArrayAttr telemetry) {
+  odsState.addOperands(operands);
+  odsState.getOrAddProperties<Properties>().tile_mask = odsBuilder.getIntegerAttr(odsBuilder.getIntegerType(64), tile_mask);
+  if (telemetry) {
+    odsState.getOrAddProperties<Properties>().telemetry = telemetry;
+  }
+  assert(resultTypes.size() == 0u && "mismatched number of results");
+  odsState.addTypes(resultTypes);
+}
+
+TfmbsFusedGemvOp TfmbsFusedGemvOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, /*optional*/uint64_t tile_mask, /*optional*/::mlir::ArrayAttr telemetry) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, std::forward<decltype(resultTypes)>(resultTypes), std::forward<decltype(operands)>(operands), std::forward<decltype(tile_mask)>(tile_mask), std::forward<decltype(telemetry)>(telemetry));
+  auto __res__ = ::llvm::dyn_cast<TfmbsFusedGemvOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+TfmbsFusedGemvOp TfmbsFusedGemvOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, /*optional*/uint64_t tile_mask, /*optional*/::mlir::ArrayAttr telemetry) {
+  return create(builder, builder.getLoc(), std::forward<decltype(resultTypes)>(resultTypes), std::forward<decltype(operands)>(operands), std::forward<decltype(tile_mask)>(tile_mask), std::forward<decltype(telemetry)>(telemetry));
+}
+
+void TfmbsFusedGemvOp::build(::mlir::OpBuilder &, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes) {
+  odsState.addOperands(operands);
+  odsState.addAttributes(attributes);
+  assert(resultTypes.size() == 0u && "mismatched number of return types");
+  odsState.addTypes(resultTypes);
+
+  if (!attributes.empty()) {
+    ::mlir::OpaqueProperties properties =
+      &odsState.getOrAddProperties<TfmbsFusedGemvOp::Properties>();
+    std::optional<::mlir::RegisteredOperationName> info =
+      odsState.name.getRegisteredInfo();
+    if (failed(info->setOpPropertiesFromAttribute(odsState.name, properties,
+        odsState.attributes.getDictionary(odsState.getContext()), nullptr)))
+      ::llvm::report_fatal_error("Property conversion failed.");
+  }
+}
+
+TfmbsFusedGemvOp TfmbsFusedGemvOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, std::forward<decltype(resultTypes)>(resultTypes), std::forward<decltype(operands)>(operands), std::forward<decltype(attributes)>(attributes));
+  auto __res__ = ::llvm::dyn_cast<TfmbsFusedGemvOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+TfmbsFusedGemvOp TfmbsFusedGemvOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes) {
+  return create(builder, builder.getLoc(), std::forward<decltype(resultTypes)>(resultTypes), std::forward<decltype(operands)>(operands), std::forward<decltype(attributes)>(attributes));
+}
+
+void TfmbsFusedGemvOp::build(::mlir::OpBuilder &, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes) {
+  odsState.addOperands(operands);
+  odsState.useProperties(const_cast<Properties&>(properties));
+  odsState.addAttributes(discardableAttributes);
+  assert(resultTypes.size() == 0u && "mismatched number of return types");
+  odsState.addTypes(resultTypes);
+}
+
+TfmbsFusedGemvOp TfmbsFusedGemvOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, std::forward<decltype(resultTypes)>(resultTypes), std::forward<decltype(operands)>(operands), std::forward<decltype(properties)>(properties), std::forward<decltype(discardableAttributes)>(discardableAttributes));
+  auto __res__ = ::llvm::dyn_cast<TfmbsFusedGemvOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+TfmbsFusedGemvOp TfmbsFusedGemvOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes) {
+  return create(builder, builder.getLoc(), std::forward<decltype(resultTypes)>(resultTypes), std::forward<decltype(operands)>(operands), std::forward<decltype(properties)>(properties), std::forward<decltype(discardableAttributes)>(discardableAttributes));
+}
+
+::llvm::LogicalResult TfmbsFusedGemvOp::verifyInvariantsImpl() {
+  auto tblgen_telemetry = getProperties().telemetry; (void)tblgen_telemetry;
+  auto tblgen_tile_mask = getProperties().tile_mask; (void)tblgen_tile_mask;
+
+  if (::mlir::failed(__mlir_ods_local_attr_constraint_TfmbsOps1(*this, tblgen_tile_mask, "tile_mask")))
+    return ::mlir::failure();
+
+  if (::mlir::failed(__mlir_ods_local_attr_constraint_TfmbsOps2(*this, tblgen_telemetry, "telemetry")))
+    return ::mlir::failure();
+  {
+    unsigned index = 0; (void)index;
+    auto valueGroup0 = getODSOperands(0);
+
+    for (auto v : valueGroup0) {
+      if (::mlir::failed(__mlir_ods_local_type_constraint_TfmbsOps2(*this, v.getType(), "operand", index++)))
+        return ::mlir::failure();
+    }
+  }
+  return ::mlir::success();
+}
+
+::llvm::LogicalResult TfmbsFusedGemvOp::verifyInvariants() {
+  return verifyInvariantsImpl();
+}
+
+::llvm::LogicalResult TfmbsFusedGemvOp::setPropertiesFromParsedAttr(Properties &prop, ::mlir::Attribute attr, ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError) {
+  ::mlir::DictionaryAttr dict = ::llvm::dyn_cast<::mlir::DictionaryAttr>(attr);
+  if (!dict) {
+    emitError() << "expected DictionaryAttr to set properties";
+    return ::mlir::failure();
+  }
+  // keep track of used keys in the input dictionary to be able to error out
+  // if there are some unknown ones.
+  ::mlir::DenseSet<::mlir::StringAttr> usedKeys;
+  ::mlir::MLIRContext *ctx = dict.getContext();
+  (void)ctx;
+  {
+
+    auto &propStorage = prop.tile_mask;
+    auto tile_maskAttrName = ::mlir::StringAttr::get(ctx, "tile_mask");
+    auto attr = dict.get(tile_maskAttrName);
+    usedKeys.insert(tile_maskAttrName);
+    if (attr || /*isRequired=*/false) {
+      if (!attr) {
+        emitError() << "expected key entry for tile_mask in DictionaryAttr to set "
+                   "Properties.";
+        return ::mlir::failure();
+      }
+      auto convertedAttr = ::llvm::dyn_cast<std::remove_reference_t<decltype(propStorage)>>(attr);
+      if (convertedAttr) {
+        propStorage = convertedAttr;
+      } else {
+        emitError() << "Invalid attribute `tile_mask` in property conversion: " << attr;
+        return ::mlir::failure();
+      }
+    }
+  }
+  {
+
+    auto &propStorage = prop.telemetry;
+    auto telemetryAttrName = ::mlir::StringAttr::get(ctx, "telemetry");
+    auto attr = dict.get(telemetryAttrName);
+    usedKeys.insert(telemetryAttrName);
+    if (attr || /*isRequired=*/false) {
+      if (!attr) {
+        emitError() << "expected key entry for telemetry in DictionaryAttr to set "
+                   "Properties.";
+        return ::mlir::failure();
+      }
+      auto convertedAttr = ::llvm::dyn_cast<std::remove_reference_t<decltype(propStorage)>>(attr);
+      if (convertedAttr) {
+        propStorage = convertedAttr;
+      } else {
+        emitError() << "Invalid attribute `telemetry` in property conversion: " << attr;
+        return ::mlir::failure();
+      }
+    }
+  }
+
+  for (::mlir::NamedAttribute attr : dict) {
+    if (!usedKeys.contains(attr.getName()))
+      return emitError() << "unknown key '" << attr.getName() <<
+          "' when parsing properties dictionary";
+  }
+  return ::mlir::success();
+}
+
+
+} // namespace mlir::tfmbs
+MLIR_DEFINE_EXPLICIT_TYPE_ID(::mlir::tfmbs::TfmbsFusedGemvOp)
+
+namespace mlir::tfmbs {
+
+
+//===----------------------------------------------------------------------===//
 // ::mlir::tfmbs::TfmbsGemvOp definitions
 //===----------------------------------------------------------------------===//
 
@@ -448,7 +936,7 @@ void TfmbsGemvOp::populateInherentAttrs(::mlir::MLIRContext *ctx, const Properti
 ::llvm::LogicalResult TfmbsGemvOp::verifyInherentAttrs(::mlir::OperationName opName, ::mlir::NamedAttrList &attrs, llvm::function_ref<::mlir::InFlightDiagnostic()> emitError) {
     {
       ::mlir::Attribute attr = attrs.get(getTelemetryAttrName(opName));
-      if (attr && ::mlir::failed(__mlir_ods_local_attr_constraint_TfmbsOps2(attr, "telemetry", emitError)))
+      if (attr && ::mlir::failed(__mlir_ods_local_attr_constraint_TfmbsOps3(attr, "telemetry", emitError)))
         return ::mlir::failure();
     }
 
@@ -652,7 +1140,7 @@ TfmbsGemvOp TfmbsGemvOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::T
   if (::mlir::failed(__mlir_ods_local_attr_constraint_TfmbsOps1(*this, tblgen_tile_mask, "tile_mask")))
     return ::mlir::failure();
 
-  if (::mlir::failed(__mlir_ods_local_attr_constraint_TfmbsOps2(*this, tblgen_telemetry, "telemetry")))
+  if (::mlir::failed(__mlir_ods_local_attr_constraint_TfmbsOps3(*this, tblgen_telemetry, "telemetry")))
     return ::mlir::failure();
   {
     unsigned index = 0; (void)index;

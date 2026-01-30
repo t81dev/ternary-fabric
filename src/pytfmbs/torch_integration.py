@@ -204,12 +204,25 @@ class TFMBSLinear(nn.Module):
 
     @property
     def telemetry_hint(self) -> dict[str, float | int | str]:
-        """Telemetry hints (layer name, sparsity, tile mask) for the compiler/runtime."""
+        """Telemetry hints (layer name, sparsity, tile mask, fusion metadata)."""
         return {
             "layer": self.layer_name,
             "sparsity": self._compute_sparsity(),
             "tile_mask": int(self.tile_mask),
+            "fusion_order": [self.layer_name],
+            "fusion_sparsity": self._compute_sparsity(),
+            "zero_count": self._zero_count(),
+            "total": self._total_elements(),
         }
+
+    def _zero_count(self) -> int:
+        weight = self.weight.detach()
+        if weight.numel() == 0:
+            return 0
+        return int(torch.count_nonzero(weight == 0).item())
+
+    def _total_elements(self) -> int:
+        return int(self.weight.numel())
 
     def _compute_sparsity(self) -> float:
         weight = self.weight.detach()
@@ -235,3 +248,26 @@ class TFMBSSequential(nn.Sequential):
             else:
                 input = module(input)
         return input
+
+    def telemetry_hint(self) -> dict[str, float | int | str | list[str]]:
+        """Aggregate telemetry hints from each TFMBSLinear in the sequence."""
+        hints = [module.telemetry_hint for module in self if isinstance(module, TFMBSLinear)]
+        if not hints:
+            return {}
+        fusion_order = []
+        total_zero = 0
+        total = 0
+        tile_masks = []
+        for hint in hints:
+            fusion_order.extend(hint.get("fusion_order", []))
+            total_zero += hint.get("zero_count", 0)
+            total += hint.get("total", 0)
+            tile_masks.append(hint.get("tile_mask", 0))
+        fusion_sparsity = float(total_zero) / float(total) if total else 0.0
+        return {
+            "layer": "->".join(fusion_order),
+            "fusion_order": fusion_order,
+            "fusion_sparsity": fusion_sparsity,
+            "sparsity": fusion_sparsity,
+            "tile_mask": max(tile_masks) if tile_masks else 0,
+        }

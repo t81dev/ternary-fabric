@@ -85,6 +85,7 @@ The project has completed **Phase 25 (Simulated RDMA Multi-Node Orchestration)**
   ```
   The script loads the tfmbs plugin as a dialect plugin before running `--pass-pipeline="builtin.module(tfmbs-to-linalg)"` so the update guardrails detect when `linalg.matmul` disappears or when tfmbs ops leak into the lowered IR. Set `MLIR_OPT` for alternate builds or wrap this invocation into CI.
 - **CI coverage:** GitHub Actions now performs the shared-MLIR build, runs `tools/torch_to_tfmbs.py` to regenerate the telemetry-rich Torch fixture, and executes `tests/mlir/run_tfmbs_to_linalg.py` (default + Torch fixture) with the dialect plugin so every merge confirms `linalg.matmul` appears even when telemetry metadata is present.
+- **Operator fusion regression:** The CI job additionally runs `tests/mlir/run_tfmbs_to_linalg.py --mlir=tests/mlir/tfmbs_fusion.mlir` so the new `tfmbs-fuse` pass can combine sequential GEMV kernels before lowering and still emit `linalg.matmul`.
 
 ---
 
