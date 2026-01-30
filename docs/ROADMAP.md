@@ -163,10 +163,12 @@ Establishing TFMBS as a first-class citizen in the MLIR/LLVM ecosystem to enable
   - **Torch/ONNX fixtures:** `tools/torch_to_tfmbs.py` converts exported Torch/ONNX graphs into `tests/mlir/torch_tfmbs.mlir` that already carries `telemetry` metadata, which downstream passes lower into `linalg.matmul` with the same hints.
   - `pytfmbs.TFMBSLinear.telemetry_hint` mirrors the same dictionary (layer name, sparsity, tile mask) so Python front ends can emit the compile-time hints that the Adaptive Runtime Agent consumes later.
   - **CI regression:** GitHub Actions clones `llvm/llvm-project`, builds shared MLIR, runs `tools/torch_to_tfmbs.py`, and executes `tests/mlir/run_tfmbs_to_linalg.py` with the dialect plugin to guarantee `linalg.matmul` is present before every merge.
+  - **Lit guard:** The new `ninja -C build check-tfmbs` target runs the fusion/multi-fusion fixtures (`tests/mlir/tfmbs_fusion.mlir`, `tests/mlir/tfmbs_multi_fusion.mlir`) via the `run_tfmbs_to_linalg.py` helper, so CI now captures telemetry/fusion regressions immediately after the plugin build.
   - **Operator Fusion:** `TfmbsFusionPass` now collapses telemetry-aligned GEMV pairs into `tfmbs.fused_gemv`, the fusion pass is exercised by `tests/mlir/tfmbs_fusion.mlir`, and CI runs the fusion+lowering pipeline so fused kernels still output `linalg.matmul`.
   - **Multi-stage coverage:** CI also runs `tests/mlir/tfmbs_multi_fusion.mlir` to show the fusion pass covers longer pipelines while preserving telemetry hints.
   - **Adaptive dashboard:** `pytfmbs.AdaptiveRuntimeAgent` logs fusion telemetry so `tools/adaptive_dashboard.py` can compare runtime fusion_order/fusion_sparsity trends against the compiler hints for Phase 26 scheduling.
-  - **Compiler Plan:** See `docs/compiler_track_plan.md` for the current MLIR dialect status, TableGen targets, and next work items while hardware verification is pending.
+- **Compiler Plan:** See `docs/compiler_track_plan.md` for the current MLIR dialect status, generated TableGen headers, pass/plugin paths, and regression/dashboard scripts that keep telemetry hints aligned while the FPGA verification workqueue resumes.
+- **Track status:** All compiler deliverables for Phase 23 are in place (dialect, passes, CI, dashboard), so Track B is fully ready to supply telemetry hints once Track A’s FPGA verification (Phase 22/10) resumes on the XC7Z020/XC7Z045 boards.
 
 **Phase 26: Dynamic Semantic Scheduling & Precision Adaptation** ✅
 Using real-time telemetry to adjust execution precision and semantic depth based on model layer sensitivity.

@@ -1,0 +1,27 @@
+[
+  {
+    "layer": "runtime_stage0->runtime_stage1",
+    "tile_mask": 1,
+    "fusion_order": [
+      "runtime_stage0",
+      "runtime_stage1"
+    ],
+    "fusion_sparsity": 0.0
+  },
+  {
+    "layer": "runtime_stage0",
+    "tile_mask": 1,
+    "fusion_order": [
+      "runtime_stage0"
+    ],
+    "fusion_sparsity": 0.0
+  },
+  {
+    "layer": "runtime_stage1",
+    "tile_mask": 1,
+    "fusion_order": [
+      "runtime_stage1"
+    ],
+    "fusion_sparsity": 0.0
+  }
+]

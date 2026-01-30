@@ -21,7 +21,19 @@ make all
 
 # 3. Explore the authoritative metrics
 cat BENCHMARKS.md
+
+# 4. Compile the Tfmbs MLIR plugin and run the regression guard
+./tools/run_tfmbs_regression.sh
 ```
+
+`tools/run_tfmbs_regression.sh` automates the `cmake -B build -G Ninja` / `ninja -C build tfmbs_plugin` flow, locates `mlir-opt` (defaults to `../llvm-project/build-shared/bin/mlir-opt`), and then runs `tests/mlir/run_tfmbs_to_linalg.py` with the built plugin; set `LLVM_DIR`, `MLIR_DIR`, `BUILD_DIR`, `MLIR_OPT`, or `TFMBS_PLUGIN` before invoking the script to override the defaults so your environment mirrors CI.
+
+## 📣 Public Readiness
+
+Before the hardware racks (XC7Z020/XC7Z045) return, reference [`docs/PUBLIC_READINESS.md`] for:
+- The public-facing story, compiler/telemetry workflow, and measurable evidence you can highlight in talks or write-ups.  
+- The offline tooling (`tools/run_tfmbs_regression.sh`, `tools/run_hw_dma_telemetry.sh`, `tools/capture_dma_telemetry.py`) that keeps DMA/telemetry, regression, and dashboard validation running without the FPGA.  
+- Clear outreach notes that list what’s ready today and the remaining hardware verification tasks waiting on the FPGA testbeds.
 
 ---
 
@@ -88,6 +100,8 @@ The project has completed **Phase 25 (Simulated RDMA Multi-Node Orchestration)**
 - **CI coverage:** GitHub Actions now performs the shared-MLIR build, runs `tools/torch_to_tfmbs.py` to regenerate the telemetry-rich Torch fixture, and executes `tests/mlir/run_tfmbs_to_linalg.py` (default + Torch fixture) with the dialect plugin so every merge confirms `linalg.matmul` appears even when telemetry metadata is present.
 - **Operator fusion regression:** The CI job additionally runs `tests/mlir/run_tfmbs_to_linalg.py --mlir=tests/mlir/tfmbs_fusion.mlir` so the new `tfmbs-fuse` pass can combine sequential GEMV kernels before lowering and still emit `linalg.matmul`.
 - **Fusion dashboard:** Use `pytfmbs.AdaptiveRuntimeAgent.save_history("logs/adaptive_history.json")` after running workloads, then run `tools/adaptive_dashboard.py` to compare `fusion_order`/`fusion_sparsity` against the compiler hints stored in `tests/mlir/torch_tfmbs.mlir`.
+
+**Track status:** Track B (compiler & MLIR) is now fully operational—dialect, passes, lit guard, regression wiring, and the dashboard loop all run off the shared LLVM/MLIR build—while Track A awaits access to the XC7Z020/XC7Z045 boards so the FPGA verification checklist and synthesis docs can be filled in.
 
 ---
 

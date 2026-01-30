@@ -24,14 +24,15 @@ Based on the ROADMAP Phase 22 callout in `docs/ROADMAP.md` (Hardware Sovereignty
    - **DMA smoke test:** after flashing, run `tests/test_dma_driver` (with `TFMBS_DMA_RING` env var set to the desired queue depth) and the mock driver’s submit CLI; expect each `TFMBS_IOC_SUBMIT_DMA` call to log a descriptor completion before proceeding.
 
 ## 3. Hardware-in-the-Loop Validation
-- **Driver validation:** run `tests/test_dma_driver.c` (or similar) using the real kernel module or the mock driver wrapped around the hardware to ensure `TFMBS_IOC_SUBMIT_DMA` returns 0 and the ring does not overflow under high load.
-- **Telemetry capture:** execute standard workloads once the FPGA is connected, capturing metrics that match `tfmbs_ioc_metrics_t` fields (zero_skips, residency hits/misses, fallback/offload counts). Compare these against emulator baselines to verify accuracy.
+- **Driver validation:** run `tests/test_dma_driver.c` (or similar) using the real kernel module or the mock driver wrapped around the hardware to ensure `TFMBS_IOC_SUBMIT_DMA` returns 0 and the ring does not overflow under high load. While the FPGA racks are still offline, use `tools/run_hw_dma_telemetry.sh` to build the Verilator `fabric_tb`, run `bin/test_dma_driver`, and automatically capture telemetry via `tools/capture_dma_telemetry.py`.
+- **Telemetry capture:** execute standard workloads once the FPGA is connected, capturing metrics that match `tfmbs_ioc_metrics_t` fields (zero_skips, residency hits/misses, fallback/offload counts). Compare these against emulator baselines to verify accuracy. The offline helper already emits `logs/adaptive_history_dma.json` and invokes `tools/adaptive_dashboard.py` so the telemetry format is ready for the dashboard once the real hardware is attached.
 - **Benchmarks:** use existing benchmark scripts (e.g., anything under `benchmarks/` or `tests/`) to load 7B+ layers and run the DMA-enabled kernels, measuring throughput and energy to confirm the >50× efficiency target for Q3 2026 in the roadmap (`docs/ROADMAP.md:188-190`).
 
 ## 4. Acceptance Criteria & Documentation
 - Define pass/fail thresholds: ring buffer throughput (descriptor/s), DMA latency, telemetry fidelity, default tile count (4 tiles × 15 lanes) as in the mock driver.
 - Log results in a running report (e.g., `docs/hardware_verification_report.md`) with sections for synthesis, driver integration, telemetry comparison, and benchmark output.
 - Update `docs/ROADMAP.md` to note Phase 10 moving past “Mock” once the hardware driver demonstrates correct IOCTL/DMA behavior; cite the verification report.
+- Keep the public readiness narrative in sync with `docs/PUBLIC_READINESS.md` so outreach materials highlight both the ready software stack and the hardware steps still gated on the XC7Z020/XC7Z045 boards.
 
 ## 5. Next Steps (after verification)
 1. Share telemetry findings with the compiler/MLIR track so they can refine sensitivity heuristics based on hardware behavior (`docs/ROADMAP.md:156-170`).

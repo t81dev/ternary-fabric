@@ -79,6 +79,9 @@ $(BIN_DIR)/test_dynamic_detection: tests/test_dynamic_detection.c
 $(BIN_DIR)/test_phase10: tests/test_phase10.c $(SRC_DIR)/tfmbs_driver_mock.c $(SRC_DIR)/fabric_emulator.c
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $^
 
+$(BIN_DIR)/test_dma_driver: tests/test_dma_driver.c $(BIN_DIR)/libtfmbs_device$(SHLIB_EXT)
+	$(CC) $(CFLAGS) -o $@ $< -L$(BIN_DIR) -ltfmbs_device
+
 $(BIN_DIR)/test_multi_tile: tests/test_multi_tile.c $(BIN_DIR)/libtfmbs_device$(SHLIB_EXT)
 	$(CC) $(CFLAGS) -o $@ $< -L$(BIN_DIR) -ltfmbs_device
 
