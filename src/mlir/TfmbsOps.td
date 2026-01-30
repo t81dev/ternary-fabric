@@ -25,6 +25,7 @@ def TfmbsPackOp : TfmbsOp<"pack"> {
     AnyType:$src,
     AnyType:$dst
   );
+  let assemblyFormat = "$src `:` type($src) `,` $dst `:` type($dst) attr-dict";
 }
 
 def TfmbsTransferOp : TfmbsOp<"transfer"> {
@@ -34,6 +35,7 @@ def TfmbsTransferOp : TfmbsOp<"transfer"> {
     AnyType:$dst,
     AnyType:$len
   );
+  let assemblyFormat = "$src `:` type($src) `,` $dst `:` type($dst) `,` $len `:` type($len) attr-dict";
 }
 
 def TfmbsDmaLoadOp : TfmbsOp<"dma_load"> {
@@ -42,6 +44,7 @@ def TfmbsDmaLoadOp : TfmbsOp<"dma_load"> {
     AnyType:$host,
     AnyType:$fabric
   );
+  let assemblyFormat = "$host `:` type($host) `,` $fabric `:` type($fabric) attr-dict";
 }
 
 def TfmbsGemvOp : TfmbsOp<"gemv"> {
@@ -49,6 +52,9 @@ def TfmbsGemvOp : TfmbsOp<"gemv"> {
   let arguments = (ins
     AnyType:$weight,
     AnyType:$input,
-    AnyType:$output
+    AnyType:$output,
+    DefaultValuedOptionalAttr<I64Attr, "0">:$tile_mask,
+    OptionalAttr<DictionaryAttr>:$telemetry
   );
+  let assemblyFormat = "$weight `:` type($weight) `,` $input `:` type($input) `,` $output `:` type($output) attr-dict";
 }

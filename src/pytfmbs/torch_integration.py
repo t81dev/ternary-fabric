@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 import pytfmbs
 import struct
+from typing import Optional
 from .constants import (
     SRAM_BANK_A_OFFSET, SRAM_BANK_B_OFFSET, SRAM_TILE_STRIDE,
     KERNEL_T_GEMM, HINT_ZERO_SKIP, LANES_PER_TILE, MAX_TILES
@@ -141,7 +142,7 @@ class TFMBSLinear(nn.Module):
     TFMBS-accelerated Linear layer.
     Automatically quantizes weights and offloads GEMV to Ternary Fabric.
     """
-    def __init__(self, in_features, out_features, fabric=None, bias=True, weight_addr=SRAM_BANK_A_OFFSET):
+    def __init__(self, in_features, out_features, fabric=None, bias=True, weight_addr=SRAM_BANK_A_OFFSET, name: Optional[str] = None):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
@@ -157,6 +158,7 @@ class TFMBSLinear(nn.Module):
         self.resident = False
         self.tile_mask = (1 << ((out_features + LANES_PER_TILE - 1) // LANES_PER_TILE)) - 1
         self.weight_addr = weight_addr
+        self._layer_name = name or f"tfmbs_linear_{id(self)}"
 
     def reset_parameters(self):
         nn.init.kaiming_uniform_(self.weight, a=np.sqrt(5))
@@ -195,6 +197,27 @@ class TFMBSLinear(nn.Module):
             input, self.fabric, self.weight_addr, self.bias,
             self.in_features, self.out_features, self.tile_mask, next_layer
         )
+
+    @property
+    def layer_name(self) -> str:
+        return self._layer_name
+
+    @property
+    def telemetry_hint(self) -> dict[str, float | int | str]:
+        """Telemetry hints (layer name, sparsity, tile mask) for the compiler/runtime."""
+        return {
+            "layer": self.layer_name,
+            "sparsity": self._compute_sparsity(),
+            "tile_mask": int(self.tile_mask),
+        }
+
+    def _compute_sparsity(self) -> float:
+        weight = self.weight.detach()
+        total = weight.numel()
+        if total == 0:
+            return 0.0
+        zero_count = torch.count_nonzero(weight == 0).item()
+        return float(zero_count) / float(total)
 
 class TFMBSSequential(nn.Sequential):
     """

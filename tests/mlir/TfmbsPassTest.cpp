@@ -13,6 +13,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/Support/raw_ostream.h"
+#include <cstdint>
 
 using namespace mlir;
 
@@ -37,7 +38,7 @@ int main(int argc, char **argv) {
   builder.setInsertionPointToStart(entryBlock);
   builder.create<mlir::tfmbs::TfmbsGemvOp>(builder.getUnknownLoc(),
       entryBlock->getArgument(0), entryBlock->getArgument(1),
-      entryBlock->getArgument(2));
+      entryBlock->getArgument(2), static_cast<uint64_t>(0), nullptr);
   builder.create<func::ReturnOp>(builder.getUnknownLoc());
 
   PassManager pm(&context);

@@ -67,5 +67,14 @@ def test_run_batch():
     # So the last one wins.
     assert profile["cycles"] == 30
 
+
+def test_linear_telemetry_hint():
+    fabric = Fabric()
+    layer = TFMBSLinear(4, 8, fabric=fabric, name="telemetry_test")
+    hint = layer.telemetry_hint
+    assert hint["layer"] == "telemetry_test"
+    assert 0.0 <= hint["sparsity"] <= 1.0
+    assert hint["tile_mask"] == layer.tile_mask
+
 if __name__ == "__main__":
     pytest.main([__file__])

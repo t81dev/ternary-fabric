@@ -21,10 +21,52 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y iverilog verilator
+        sudo apt-get install -y iverilog verilator cmake ninja-build
         python -m pip install --upgrade pip
-        pip install numpy setuptools pytest
+        pip install numpy setuptools pytest onnx
         pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+    - name: Check out LLVM/MLIR
+      uses: actions/checkout@v3
+      with:
+        repository: llvm/llvm-project
+        path: llvm-project
+
+    - name: Configure LLVM/MLIR shared build
+      run: |
+        cmake -S llvm-project/llvm -B llvm-project/build-shared \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DLLVM_ENABLE_PROJECTS="mlir" \
+          -DLLVM_TARGETS_TO_BUILD="host" \
+          -DBUILD_SHARED_LIBS=ON \
+          -DLLVM_ENABLE_RTTI=ON
+
+    - name: Build mlir-opt
+      run: ninja -C llvm-project/build-shared mlir-opt
+
+    - name: Configure TFMBS plugin
+      run: |
+        rm -rf build
+        cmake -S . -B build -G Ninja \
+          -DLLVM_DIR=llvm-project/build-shared/lib/cmake/llvm \
+          -DMLIR_DIR=llvm-project/build-shared/lib/cmake/mlir
+
+    - name: Build TFMBS plugin
+      run: ninja -C build tfmbs_plugin TfmbsPassTest
+
+    - name: Emit Torch/ONNX MLIR
+      run: python tools/torch_to_tfmbs.py --emit tests/mlir/torch_tfmbs.mlir
+
+    - name: Run tfmbs-to-linalg regression
+      run: |
+        python3 tests/mlir/run_tfmbs_to_linalg.py \
+          --mlir-opt=llvm-project/build-shared/bin/mlir-opt \
+          --plugin=build/libtfmbs_plugin.so
+        python3 tests/mlir/run_tfmbs_to_linalg.py \
+          --mlir-opt=llvm-project/build-shared/bin/mlir-opt \
+          --plugin=build/libtfmbs_plugin.so \
+          --mlir=tests/mlir/torch_tfmbs.mlir
 
     - name: Build all
       run: make all

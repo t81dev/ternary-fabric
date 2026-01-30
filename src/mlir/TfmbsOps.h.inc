@@ -203,7 +203,8 @@ public:
   static TfmbsDmaLoadOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes = {});
   ::llvm::LogicalResult verifyInvariantsImpl();
   ::llvm::LogicalResult verifyInvariants();
-  static ::llvm::LogicalResult setPropertiesFromParsedAttr(Properties &prop, ::mlir::Attribute attr, ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError);
+  static ::mlir::ParseResult parse(::mlir::OpAsmParser &parser, ::mlir::OperationState &result);
+  void print(::mlir::OpAsmPrinter &_odsPrinter);
 public:
 };
 
@@ -221,7 +222,37 @@ namespace detail {
 
 class TfmbsGemvOpGenericAdaptorBase {
 public:
-  using Properties = ::mlir::EmptyProperties;
+  struct Properties {
+    using telemetryTy = ::mlir::DictionaryAttr;
+    telemetryTy telemetry;
+
+    auto getTelemetry() const {
+      auto &propStorage = this->telemetry;
+      return ::llvm::dyn_cast_or_null<::mlir::DictionaryAttr>(propStorage);
+    }
+    void setTelemetry(const ::mlir::DictionaryAttr &propValue) {
+      this->telemetry = propValue;
+    }
+    using tile_maskTy = ::mlir::IntegerAttr;
+    tile_maskTy tile_mask;
+
+    auto getTileMask() const {
+      auto &propStorage = this->tile_mask;
+      return ::llvm::dyn_cast_or_null<::mlir::IntegerAttr>(propStorage);
+    }
+    void setTileMask(const ::mlir::IntegerAttr &propValue) {
+      this->tile_mask = propValue;
+    }
+    bool operator==(const Properties &rhs) const {
+      return 
+        rhs.telemetry == this->telemetry &&
+        rhs.tile_mask == this->tile_mask &&
+        true;
+    }
+    bool operator!=(const Properties &rhs) const {
+      return !(*this == rhs);
+    }
+  };
 protected:
   ::mlir::DictionaryAttr odsAttrs;
   ::std::optional<::mlir::OperationName> odsOpName;
@@ -246,6 +277,14 @@ public:
     return odsAttrs;
   }
 
+  ::mlir::IntegerAttr getTileMaskAttr();
+  uint64_t getTileMask();
+  ::mlir::DictionaryAttr getTelemetryAttr() {
+    auto attr = ::llvm::dyn_cast_or_null<::mlir::DictionaryAttr>(getProperties().telemetry);
+    return attr;
+  }
+
+  ::std::optional< ::mlir::DictionaryAttr > getTelemetry();
 };
 
 } // namespace detail
@@ -304,7 +343,7 @@ public:
 
   ::llvm::LogicalResult verify(::mlir::Location loc);
 };
-class TfmbsGemvOp : public ::mlir::Op<TfmbsGemvOp, ::mlir::OpTrait::ZeroRegions, ::mlir::OpTrait::ZeroResults, ::mlir::OpTrait::ZeroSuccessors, ::mlir::OpTrait::NOperands<3>::Impl, ::mlir::OpTrait::OpInvariants> {
+class TfmbsGemvOp : public ::mlir::Op<TfmbsGemvOp, ::mlir::OpTrait::ZeroRegions, ::mlir::OpTrait::ZeroResults, ::mlir::OpTrait::ZeroSuccessors, ::mlir::OpTrait::NOperands<3>::Impl, ::mlir::OpTrait::OpInvariants, ::mlir::BytecodeOpInterface::Trait> {
 public:
   using Op::Op;
   using Op::print;
@@ -317,7 +356,24 @@ public:
   static constexpr int odsIndex_output = 2;
   using Properties = FoldAdaptor::Properties;
   static ::llvm::ArrayRef<::llvm::StringRef> getAttributeNames() {
-    return {};
+    static ::llvm::StringRef attrNames[] = {::llvm::StringRef("telemetry"), ::llvm::StringRef("tile_mask")};
+    return ::llvm::ArrayRef(attrNames);
+  }
+
+  ::mlir::StringAttr getTelemetryAttrName() {
+    return getAttributeNameForIndex(0);
+  }
+
+  static ::mlir::StringAttr getTelemetryAttrName(::mlir::OperationName name) {
+    return getAttributeNameForIndex(name, 0);
+  }
+
+  ::mlir::StringAttr getTileMaskAttrName() {
+    return getAttributeNameForIndex(1);
+  }
+
+  static ::mlir::StringAttr getTileMaskAttrName(::mlir::OperationName name) {
+    return getAttributeNameForIndex(name, 1);
   }
 
   static constexpr ::llvm::StringLiteral getOperationName() {
@@ -378,12 +434,51 @@ public:
   static void setInherentAttr(Properties &prop, llvm::StringRef name, mlir::Attribute value);
   static void populateInherentAttrs(::mlir::MLIRContext *ctx, const Properties &prop, ::mlir::NamedAttrList &attrs);
   static ::llvm::LogicalResult verifyInherentAttrs(::mlir::OperationName opName, ::mlir::NamedAttrList &attrs, llvm::function_ref<::mlir::InFlightDiagnostic()> emitError);
-  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output);
-  static TfmbsGemvOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output);
-  static TfmbsGemvOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output);
-  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output);
-  static TfmbsGemvOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output);
-  static TfmbsGemvOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output);
+  static ::llvm::LogicalResult readProperties(::mlir::DialectBytecodeReader &reader, ::mlir::OperationState &state);
+  void writeProperties(::mlir::DialectBytecodeWriter &writer);
+  ::mlir::IntegerAttr getTileMaskAttr() {
+    return ::llvm::dyn_cast_or_null<::mlir::IntegerAttr>(getProperties().tile_mask);
+  }
+
+  uint64_t getTileMask();
+  ::mlir::DictionaryAttr getTelemetryAttr() {
+    return ::llvm::dyn_cast_or_null<::mlir::DictionaryAttr>(getProperties().telemetry);
+  }
+
+  ::std::optional< ::mlir::DictionaryAttr > getTelemetry();
+  void setTileMaskAttr(::mlir::IntegerAttr attr) {
+    getProperties().tile_mask = attr;
+  }
+
+  void setTileMask(::std::optional<uint64_t> attrValue);
+  void setTelemetryAttr(::mlir::DictionaryAttr attr) {
+    getProperties().telemetry = attr;
+  }
+
+  ::mlir::Attribute removeTileMaskAttr() {
+      auto attr = getProperties().tile_mask;
+      getProperties().tile_mask = {};
+      return attr;
+  }
+
+  ::mlir::Attribute removeTelemetryAttr() {
+      auto attr = getProperties().telemetry;
+      getProperties().telemetry = {};
+      return attr;
+  }
+
+  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output, /*optional*/::mlir::IntegerAttr tile_mask, /*optional*/::mlir::DictionaryAttr telemetry);
+  static TfmbsGemvOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output, /*optional*/::mlir::IntegerAttr tile_mask, /*optional*/::mlir::DictionaryAttr telemetry);
+  static TfmbsGemvOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output, /*optional*/::mlir::IntegerAttr tile_mask, /*optional*/::mlir::DictionaryAttr telemetry);
+  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output, /*optional*/::mlir::IntegerAttr tile_mask, /*optional*/::mlir::DictionaryAttr telemetry);
+  static TfmbsGemvOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output, /*optional*/::mlir::IntegerAttr tile_mask, /*optional*/::mlir::DictionaryAttr telemetry);
+  static TfmbsGemvOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output, /*optional*/::mlir::IntegerAttr tile_mask, /*optional*/::mlir::DictionaryAttr telemetry);
+  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output, /*optional*/uint64_t tile_mask, /*optional*/::mlir::DictionaryAttr telemetry);
+  static TfmbsGemvOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output, /*optional*/uint64_t tile_mask, /*optional*/::mlir::DictionaryAttr telemetry);
+  static TfmbsGemvOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output, /*optional*/uint64_t tile_mask, /*optional*/::mlir::DictionaryAttr telemetry);
+  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output, /*optional*/uint64_t tile_mask, /*optional*/::mlir::DictionaryAttr telemetry);
+  static TfmbsGemvOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output, /*optional*/uint64_t tile_mask, /*optional*/::mlir::DictionaryAttr telemetry);
+  static TfmbsGemvOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::Value weight, ::mlir::Value input, ::mlir::Value output, /*optional*/uint64_t tile_mask, /*optional*/::mlir::DictionaryAttr telemetry);
   static void build(::mlir::OpBuilder &, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes = {});
   static TfmbsGemvOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes = {});
   static TfmbsGemvOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes = {});
@@ -392,7 +487,21 @@ public:
   static TfmbsGemvOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes = {});
   ::llvm::LogicalResult verifyInvariantsImpl();
   ::llvm::LogicalResult verifyInvariants();
-  static ::llvm::LogicalResult setPropertiesFromParsedAttr(Properties &prop, ::mlir::Attribute attr, ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError);
+  static ::mlir::ParseResult parse(::mlir::OpAsmParser &parser, ::mlir::OperationState &result);
+  void print(::mlir::OpAsmPrinter &_odsPrinter);
+private:
+  ::mlir::StringAttr getAttributeNameForIndex(unsigned index) {
+    return getAttributeNameForIndex((*this)->getName(), index);
+  }
+
+  static ::mlir::StringAttr getAttributeNameForIndex(::mlir::OperationName name, unsigned index) {
+    assert(index < 2 && "invalid attribute index");
+    assert(name.getStringRef() == getOperationName() && "invalid operation name");
+    assert(name.isRegistered() && "Operation isn't registered, missing a "
+          "dependent dialect loading?");
+    return name.getAttributeNames()[index];
+  }
+
 public:
 };
 
@@ -566,7 +675,8 @@ public:
   static TfmbsPackOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes = {});
   ::llvm::LogicalResult verifyInvariantsImpl();
   ::llvm::LogicalResult verifyInvariants();
-  static ::llvm::LogicalResult setPropertiesFromParsedAttr(Properties &prop, ::mlir::Attribute attr, ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError);
+  static ::mlir::ParseResult parse(::mlir::OpAsmParser &parser, ::mlir::OperationState &result);
+  void print(::mlir::OpAsmPrinter &_odsPrinter);
 public:
 };
 
@@ -755,7 +865,8 @@ public:
   static TfmbsTransferOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes = {});
   ::llvm::LogicalResult verifyInvariantsImpl();
   ::llvm::LogicalResult verifyInvariants();
-  static ::llvm::LogicalResult setPropertiesFromParsedAttr(Properties &prop, ::mlir::Attribute attr, ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError);
+  static ::mlir::ParseResult parse(::mlir::OpAsmParser &parser, ::mlir::OperationState &result);
+  void print(::mlir::OpAsmPrinter &_odsPrinter);
 public:
 };
 

@@ -29,6 +29,7 @@ namespace tfmbs {
 
 void registerTfmbsDialect(DialectRegistry &registry) {
   TfmbsDialect::registerDialect(registry);
+  registry.insert<mlir::linalg::LinalgDialect>();
 }
 
 } // namespace tfmbs

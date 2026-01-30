@@ -1,6 +1,7 @@
 #ifndef TFMBS_DIALECT_H
 #define TFMBS_DIALECT_H
 
+#include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/OpDefinition.h"

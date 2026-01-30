@@ -4,8 +4,13 @@ project(tfmbs_mlir LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
-set(LLVM_DIR "/Users/t81dev/Code/llvm-project/build/lib/cmake/llvm")
-set(MLIR_DIR "/Users/t81dev/Code/llvm-project/build/lib/cmake/mlir")
+if(NOT LLVM_DIR)
+  set(LLVM_DIR "/Users/t81dev/Code/llvm-project/build/lib/cmake/llvm")
+endif()
+
+if(NOT MLIR_DIR)
+  set(MLIR_DIR "/Users/t81dev/Code/llvm-project/build/lib/cmake/mlir")
+endif()
 
 list(APPEND CMAKE_PREFIX_PATH ${LLVM_DIR} ${MLIR_DIR})
 list(APPEND CMAKE_MODULE_PATH ${LLVM_DIR} ${MLIR_DIR})
@@ -44,6 +49,6 @@ add_mlir_library(tfmbs_plugin SHARED
 )
 
 set_target_properties(tfmbs_dialect PROPERTIES
-  INSTALL_RPATH "@loader_path")
+  INSTALL_RPATH "@loader_path;@loader_path/../../../lib;/Users/t81dev/Code/llvm-project/build-shared/lib")
 set_target_properties(tfmbs_plugin PROPERTIES
-  INSTALL_RPATH "@loader_path")
+  INSTALL_RPATH "@loader_path;@loader_path/../../../lib;/Users/t81dev/Code/llvm-project/build-shared/lib")

@@ -20,7 +20,8 @@ struct TfmbsToLinalgPass : public PassWrapper<TfmbsToLinalgPass, OperationPass<M
   void runOnOperation() override {
     ModuleOp module = getOperation();
     module.walk([&](TfmbsGemvOp op) {
-      OpBuilder builder(op);
+      op.getContext()->getOrLoadDialect<linalg::LinalgDialect>();
+      OpBuilder builder(op.getOperation());
       Value lhs = op.getInput();
       Value rhs = op.getWeight();
       Value dst = op.getOutput();

@@ -75,6 +75,17 @@ The project has completed **Phase 25 (Simulated RDMA Multi-Node Orchestration)**
 - **[Whitepaper](WHITE_PAPER.md):** Technical narrative, architecture, and comparisons.
 - **[Benchmarks](BENCHMARKS.md):** Authoritative performance and resource metrics.
 
+## 🧪 Compiler Regression
+
+- Exercise the tfmbs-to-linalg pipeline via the regression helper script:
+  ```bash
+  python3 tests/mlir/run_tfmbs_to_linalg.py \
+    --mlir-opt=../llvm-project/build-shared/bin/mlir-opt \
+    --plugin=build/libtfmbs_plugin.dylib
+  ```
+  The script loads the tfmbs plugin as a dialect plugin before running `--pass-pipeline="builtin.module(tfmbs-to-linalg)"` so the update guardrails detect when `linalg.matmul` disappears or when tfmbs ops leak into the lowered IR. Set `MLIR_OPT` for alternate builds or wrap this invocation into CI.
+- **CI coverage:** GitHub Actions now performs the shared-MLIR build, runs `tools/torch_to_tfmbs.py` to regenerate the telemetry-rich Torch fixture, and executes `tests/mlir/run_tfmbs_to_linalg.py` (default + Torch fixture) with the dialect plugin so every merge confirms `linalg.matmul` appears even when telemetry metadata is present.
+
 ---
 
 ## 📝 Discrepancies & Notes

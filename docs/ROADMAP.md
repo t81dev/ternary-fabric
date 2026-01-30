@@ -160,6 +160,9 @@ Finalizing the architecture for physical fabrication (e.g., 7nm/12nm nodes).
 Establishing TFMBS as a first-class citizen in the MLIR/LLVM ecosystem to enable transparent model portability.
 - **Deliverables:**
   - **Lowering Passes:** Automated conversion from Torch-MLIR and ONNX to TFMBS kernels.
+  - **Torch/ONNX fixtures:** `tools/torch_to_tfmbs.py` converts exported Torch/ONNX graphs into `tests/mlir/torch_tfmbs.mlir` that already carries `telemetry` metadata, which downstream passes lower into `linalg.matmul` with the same hints.
+  - `pytfmbs.TFMBSLinear.telemetry_hint` mirrors the same dictionary (layer name, sparsity, tile mask) so Python front ends can emit the compile-time hints that the Adaptive Runtime Agent consumes later.
+  - **CI regression:** GitHub Actions clones `llvm/llvm-project`, builds shared MLIR, runs `tools/torch_to_tfmbs.py`, and executes `tests/mlir/run_tfmbs_to_linalg.py` with the dialect plugin to guarantee `linalg.matmul` is present before every merge.
   - **Operator Fusion:** Graph-level optimizations for cross-kernel fusion and buffer reuse.
   - **Compiler Plan:** See `docs/compiler_track_plan.md` for the current MLIR dialect status, TableGen targets, and next work items while hardware verification is pending.
 
