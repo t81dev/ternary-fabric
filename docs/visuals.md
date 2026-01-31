@@ -103,3 +103,58 @@ PT-5 packing achieves higher density than standard 2-bit-per-trit encoding.
 | **PT-5** | 5 | **95.1%** |
 
 *Efficiency calculation based on $\log_2(3^5) / 8$.*
+
+## 4. Multi-Node Orchestration Feedback
+
+Telemetry, scheduling, and fusion logic form a feedback loop that keeps Fabric residency and DMA queues synchronized across nodes. The following diagram emphasizes how host telemetry feeds the global orchestrator, which then steers predictive scheduling, cross-fabric fusion, and simulated RDMA while DMA captures execution metadata.
+
+```mermaid
+graph LR
+    subgraph Binary Host
+        HostApp[AI Application/Runtime]
+        HostDriver[`pytfmbs` Driver]
+        HostControl[TFD Builder + Telemetry Agent]
+    end
+
+    subgraph DMA Plane
+        AXI_DMA[AXI DMA + Ring Descriptors]
+        DMA_Telemetry[Telemetry Capture]
+    end
+
+    subgraph Ternary Fabric Core
+        FrameController[Frame Controller]
+        subgraph Tiles
+            Tile0[Tile 0: SRAM + Vector Engine + Results]
+            Tile1[Tile 1: ...]
+            TileN[Tile N: ...]
+        end
+        GlobalOrch[Global Orchestrator]
+        PredictiveSched[Predictive Scheduler]
+        TelemetryLoop[Telemetry Feed]
+    end
+
+    subgraph Multi-Node Layer
+        RDMA[Simulated RDMA / Socket Fabric]
+        Fusion[Cross-Fabric Fusion Engine]
+    end
+
+    HostApp --> HostDriver
+    HostDriver --> AXI_DMA
+    AXI_DMA --> FrameController
+    FrameController --> Tile0
+    FrameController --> Tile1
+    FrameController --> TileN
+    Tile0 --> TelemetryLoop
+    Tile1 --> TelemetryLoop
+    TileN --> TelemetryLoop
+    TelemetryLoop --> GlobalOrch
+    GlobalOrch --> PredictiveSched
+    PredictiveSched --> FrameController
+    GlobalOrch --> Fusion
+    Fusion --> RDMA
+    RDMA --> AXI_DMA
+    TelemetryLoop --> DMA_Telemetry
+    HostControl --> TelemetryLoop
+```
+
+*Caption: The orchestration loop keeps telemetry, scheduling, fusion, and simulated RDMA in sync so every fabric tile sees predictable data residency even when scaling across nodes.*

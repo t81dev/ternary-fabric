@@ -1,4 +1,4 @@
-// RUN: mlir-opt --pass-pipeline=tfmbs-to-linalg %s | FileCheck %s
+// RUN: %mlir-opt --load-dialect-plugin=%tfmbs-plugin --pass-pipeline=builtin.module(tfmbs-to-linalg) %s | %filecheck %s
 
 module {
   func.func @gemv(%weights: memref<4x4xf32>, %input: memref<4x4xf32>, %output: memref<4x4xf32>) {
