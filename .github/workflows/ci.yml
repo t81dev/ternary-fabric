@@ -10,7 +10,7 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     env:
-      LD_LIBRARY_PATH: ${{ github.workspace }}/build:${{ github.workspace }}/llvm-project/build-shared/lib:${{ env.LD_LIBRARY_PATH }}
+      LD_LIBRARY_PATH: ${{ github.workspace }}/build:${{ github.workspace }}/llvm-project/build-shared/lib:$LD_LIBRARY_PATH
 
     steps:
     - uses: actions/checkout@v3
