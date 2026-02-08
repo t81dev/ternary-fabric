@@ -99,6 +99,7 @@ Our north-star KPI is **zero-skip MACs avoided per Fabric Cost** (`zero_skips / 
 - **[Whitepaper](WHITE_PAPER.md):** Technical narrative, architecture, and comparisons.
 - **[Benchmarks](BENCHMARKS.md):** Authoritative performance and resource metrics.
 - **[Fabric Illusion Contract](docs/FABRIC_ILLUSION_CONTRACT.md):** What the interposer intercepts, the guarantees it offers, and the safe failure modes we support.
+- **[Phase 3 Integration Handoff](docs/PHASE3_INTEGRATION_HANDOFF.md):** Ecosystem handoff checklist, measurable signals, and reproducible evidence path.
 
 ## 🧪 Compiler Regression
 
