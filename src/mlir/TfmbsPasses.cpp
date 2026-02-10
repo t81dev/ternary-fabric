@@ -101,6 +101,14 @@ struct TfmbsToLinalgPass : public PassWrapper<TfmbsToLinalgPass, OperationPass<M
         builder.create<linalg::MatmulOp>(op.getLoc(), ValueRange{op.getInput(), op.getWeight()}, ValueRange{op.getOutput()});
         op.erase();
       }
+
+      if (auto op = dyn_cast<TfmbsConv2DOp>(operation)) {
+        op.getContext()->getOrLoadDialect<linalg::LinalgDialect>();
+        OpBuilder builder(op.getOperation());
+        // Lower to linalg.conv_2d_nhwc_fhwc (typical for ternary optimized flow)
+        builder.create<linalg::Conv2DNhwcFhwcOp>(op.getLoc(), ValueRange{op.getInput(), op.getFilter()}, ValueRange{op.getOutput()});
+        op.erase();
+      }
     });
   }
 };

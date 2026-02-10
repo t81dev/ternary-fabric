@@ -59,16 +59,16 @@ Ternary Fabric operates as a **semantic execution substrate**, not a library rew
 
 ## 🏗️ Project State & Architecture
 
-The project is currently in **Phase 25**, extending the fabric to a **Distributed Multi-Node Orchestration**:
+The project is currently in **Phase 26**, extending the fabric to **Adaptive Runtime & Physical Hardware Bring-up**:
 
-* **Global Orchestration:** Coordinate workloads across multiple distinct TFMBS fabrics and physical nodes.
-* **Predictive Scheduling:** Use lookahead telemetry to anticipate bottlenecks and optimize hot-state residency.
-* **Simulated RDMA:** Socket-based inter-process communication for scaling across clusters.
-* **DMA Ring Buffer:** Realistic driver-level interaction with asynchronous descriptor queues.
+* **Adaptive Offloading:** Dynamic CPU fallback and offload decisions based on real-time sparsity EMA.
+* **Physical Hardware Support:** Automated Vivado synthesis flows and on-FPGA verification for XC7Z020.
+* **RDMA-like stubs:** Enhanced multi-node communication with Queue Pair and Completion Queue semantics.
+* **Torch Integration:** Transparent acceleration via `torch.compile` and the TFMBS backend.
 
 ### Architecture Layers
 
-The project has completed **Phase 25 (Simulated RDMA Multi-Node Orchestration)**. Key deliverables include:
+The project has completed **Phase 26 (Adaptive Hardware Bring-up)**. Key deliverables include:
 
 - **Global Orchestrator:** Dynamic workload distribution across multiple Fabric Instances.
 - **Predictive Scheduler:** 5-kernel lookahead for residency anticipation and hot-state pre-loading.
@@ -115,7 +115,7 @@ Our north-star KPI is **zero-skip MACs avoided per Fabric Cost** (`zero_skips / 
 - **Operator fusion regression:** The CI job additionally runs `tests/mlir/run_tfmbs_to_linalg.py --mlir=tests/mlir/tfmbs_fusion.mlir` so the new `tfmbs-fuse` pass can combine sequential GEMV kernels before lowering and still emit `linalg.matmul`.
 - **Fusion dashboard:** Use `pytfmbs.AdaptiveRuntimeAgent.save_history("logs/adaptive_history.json")` after running workloads, then run `tools/adaptive_dashboard.py` to compare `fusion_order`/`fusion_sparsity` against the compiler hints stored in `tests/mlir/torch_tfmbs.mlir`.
 
-**Track status:** Track B (compiler & MLIR) is now fully operational—dialect, passes, lit guard, regression wiring, and the dashboard loop all run off the shared LLVM/MLIR build—while Track A awaits access to the XC7Z020/XC7Z045 boards so the FPGA verification checklist and synthesis docs can be filled in.
+**Track status:** Track B (compiler & MLIR) is now fully operational—dialect, passes, lit guard, regression wiring, and the dashboard loop all run off the shared LLVM/MLIR build—while Track A (Hardware) has completed the first phase of physical bring-up on XC7Z020, including automated bitstream generation and hello-world validation.
 
 ---
 

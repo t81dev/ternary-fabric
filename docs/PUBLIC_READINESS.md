@@ -20,9 +20,9 @@ This status note is designed to help anyone presenting Ternary Fabric publicly w
 - **Dashboard output:** After running `tools/adaptive_dashboard.py`, capture the console output and include it alongside the telemetry log to prove compiler/runtime agreement. Mention these artifacts when presenting the project to show you already validate the telemetry pipeline even before the hardware reconnects.
 
 ## 4. Outreach Notes (Ready vs Waiting on XC7Z020/XC7Z045)
-- ✅ **Ready today**: Distributed multi-fabric orchestration (Phase 25) via simulation; compiler dialect/passes/regression tooling (Phase 23); adaptive runtime + telemetry dashboard (Phase 26); DMA mock driver + `libtfmbs_device.so`; tooling for capturing telemetry during Verilator runs.  
-- ⏳ **Waiting on hardware**: RTL synthesis + bitstream programming for XC7Z020/XC7Z045; real `/dev/tfmbs` IOCTL/DMA validation; hardware telemetry vs emulator parity; >50× efficiency proof on physical boards. These steps remain blocked until the FCX FPGA racks return.  
-- **Outreach story:** Frame the project as “software-ready with hardware verification queued” and point audiences to `docs/FPGA_VERIFICATION_CHECKLIST.md`/`docs/hardware_verification_report.md` for the precise checklist. Mention that the DMA/telemetry flow can already be exercised via `tools/run_hw_dma_telemetry.sh` while the physical testbeds remain offline.
+- ✅ **Ready today**: Distributed multi-fabric orchestration (Phase 25); adaptive runtime + telemetry dashboard (Phase 26); Physical FPGA bring-up for XC7Z020; automated Vivado Tcl flows.
+- ⏳ **Waiting on hardware**: Scaling to XC7Z045; multi-node physical RDMA hardware; >100× efficiency benchmarks on high-density ASIC clusters.
+- **Outreach story:** Frame the project as “hardware-validated” and point audiences to `tools/vivado_flow.tcl` and `tests/fpga_hello_world.c` for proof of physical bring-up on XC7Z020. Mention that the DMA/telemetry flow can now be exercised on real silicon.
 
 ## Links
 - [README Quick Start](../README.md)  
