@@ -73,3 +73,34 @@ def TfmbsFusedGemvOp : TfmbsOp<"fused_gemv"> {
     The `operands` are a repeating sequence of weight/input/output for each stage.
   }];
 }
+
+def TfmbsConv2DOp : TfmbsOp<"conv2d"> {
+  let summary = "2D Convolution kernel targeting the ternary fabric.";
+  let arguments = (ins
+    AnyType:$input,
+    AnyType:$filter,
+    AnyType:$output,
+    DefaultValuedOptionalAttr<I64Attr, "0">:$tile_mask,
+    OptionalAttr<DictionaryAttr>:$telemetry
+  );
+  let assemblyFormat = "$input `:` type($input) `,` $filter `:` type($filter) `,` $output `:` type($output) attr-dict";
+}
+
+def TfmbsFusedAttnOp : TfmbsOp<"fused_attn"> {
+  let summary = "Fused Attention block (QKV matmuls + Softmax + Proj).";
+  let arguments = (ins
+    Variadic<AnyType>:$operands,
+    DefaultValuedOptionalAttr<I64Attr, "0">:$tile_mask,
+    OptionalAttr<ArrayAttr>:$telemetry
+  );
+  let description = [{
+    Represents a fused attention block consisting of Q, K, V matmuls,
+    softmax scaling, and output projection.
+  }];
+}
+
+def TfmbsSoftmaxOp : TfmbsOp<"softmax"> {
+  let summary = "Softmax activation targeting the fabric.";
+  let arguments = (ins AnyType:$input, AnyType:$output);
+  let assemblyFormat = "$input `:` type($input) `,` $output `:` type($output) attr-dict";
+}

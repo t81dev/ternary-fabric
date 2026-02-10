@@ -61,6 +61,19 @@ int fabric_net_recv(void* buf, size_t len) {
     return (recvd < 0) ? -1 : 0;
 }
 
+int fabric_net_post_send(int dst_node, tfmbs_rdma_wr_t* wr) {
+    // Wrap WR in a network packet and send via existing socket mechanism
+    return fabric_net_send(dst_node, wr->addr, wr->length);
+}
+
+int fabric_net_poll_cq(tfmbs_rdma_wc_t* wc, int max_entries) {
+    // In this mock, we assume success for the last sent operation
+    if (max_entries <= 0) return 0;
+    wc[0].wr_id = 0; // Dummy ID
+    wc[0].status = 0; // Success
+    return 1;
+}
+
 void fabric_net_cleanup() {
     if (g_listen_fd >= 0) {
         close(g_listen_fd);

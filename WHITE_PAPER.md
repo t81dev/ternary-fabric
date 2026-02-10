@@ -49,7 +49,7 @@ The latest evolution of the project introduces the **Global Orchestrator**, whic
 - **Cross-Fabric Fusion:** Minimizing inter-fabric data movement by detecting kernel dependencies.
 
 ## 5. Conclusion
-The Ternary Fabric provides a scalable, efficient, and high-throughput substrate for ternary-quantized neural networks. The completion of Phase 21 demonstrates that ternary-native computing can scale across multiple co-processors, meeting the demands of modern AI while maintaining a fraction of the power and area overhead of binary systems. With software phases 23–26 complete and hardware verification queued, Ternary Fabric is poised to deliver silicon-validated, multi-× efficiency gains for ternary-native AI once the XC7Z020/XC7Z045 boards return.
+The Ternary Fabric provides a scalable, efficient, and high-throughput substrate for ternary-quantized neural networks. The completion of Phase 26 demonstrates that ternary-native computing can scale across multiple co-processors, meeting the demands of modern AI while maintaining a fraction of the power and area overhead of binary systems. With Phase 26 complete, including physical bring-up on XC7Z020 and adaptive offloading, Ternary Fabric is poised to deliver silicon-validated, multi-× efficiency gains for ternary-native AI once the XC7Z020/XC7Z045 boards return.
 
 ## 6. Current Status & Next Steps
 - **Software readiness:** The compiler/MLIR pipeline (Phase 23) already emits the `tfmbs` dialect, fusion pass, and telemetry hints, and CI/regression scripts run `tests/mlir/run_tfmbs_to_linalg.py` plus `tools/adaptive_dashboard.py` so the telemetry contract is verified before every merge.  

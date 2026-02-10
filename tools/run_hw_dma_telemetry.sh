@@ -37,6 +37,10 @@ stop_simulation() {
 
 collect_telemetry() {
   echo "Running DMA driver smoke test and capturing telemetry..."
+  if [[ "${TFMBS_TARGET:-sim}" == "fpga" ]]; then
+    echo "Targeting physical FPGA (FABRIC_HARDWARE_PATH=1)"
+    export FABRIC_HARDWARE_PATH=1
+  fi
   FABRIC_SHORT_CIRCUIT=1 TFMBS_DMA_RING=${TFMBS_DMA_RING:-256} "$BIN_DIR/test_dma_driver"
   python3 "$REPO_ROOT/tools/capture_dma_telemetry.py" \
     --libtfmbs "$BIN_DIR/libtfmbs_device${SHLIB_SUFFIX:-.so}" \
@@ -66,8 +70,12 @@ build_dma_driver() {
 }
 
 run_regression_helper
-build_hw_sim
+if [[ "${TFMBS_TARGET:-sim}" == "sim" ]]; then
+  build_hw_sim
+fi
 build_dma_driver
-start_simulation
+if [[ "${TFMBS_TARGET:-sim}" == "sim" ]]; then
+  start_simulation
+fi
 collect_telemetry
 compare_telemetry

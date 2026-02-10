@@ -64,6 +64,7 @@ static struct {
 static int g_residency_count = 0;
 
 static void* orchestrator_loop(void* arg);
+static int estimate_task_cost(orch_task_t* task, int node_id);
 
 static void init_device() {
     if (g_initialized) return;
@@ -229,6 +230,14 @@ fabric_handle_t fabric_exec_gemv_async(void* weight_ptr, void* input_ptr, void* 
 
     task->dispatched = 0; task->emu_handle = NULL;
     pthread_mutex_init(&task->mutex, NULL); pthread_cond_init(&task->cond, NULL); task->next = NULL;
+
+    // Adaptive Partitioning: Decide node based on cost
+    if (g_this_node_id == 0 && getenv("TFMBS_ENABLE_PARTITIONING")) {
+        int cost_local = estimate_task_cost(task, 0);
+        int cost_remote = estimate_task_cost(task, 1);
+        if (cost_remote < cost_local) task->node_id = 1;
+    }
+
     pthread_mutex_lock(&g_orch_mutex);
     if (g_orch_tail) { g_orch_tail->next = task; g_orch_tail = task; }
     else g_orch_head = g_orch_tail = task;
@@ -348,13 +357,31 @@ int fabric_submit_tfd(tfmbs_tfd_t* tfd) {
 
 void fabric_get_metrics(fabric_metrics_t* out_metrics) {
     init_device();
-    if (out_metrics) {
-        fabric_metrics_t m;
-        emu_fabric_get_metrics_id(g_last_dispatched_fid, &m);
-        m.fallback_count = g_fallback_count;
-        m.offload_count = g_offload_count;
-        *out_metrics = m;
+    if (!out_metrics) return;
+
+    if (g_tfmbs_fd >= 0) {
+        tfmbs_ioc_metrics_t ioc_m;
+        if (tfmbs_dev_ioctl(g_tfmbs_fd, TFMBS_IOC_GET_METRICS, &ioc_m) == 0) {
+            out_metrics->zero_skips = ioc_m.zero_skips;
+            out_metrics->total_ops = ioc_m.total_ops;
+            out_metrics->active_ops = ioc_m.active_ops;
+            out_metrics->mem_reads = ioc_m.mem_reads;
+            out_metrics->mem_writes = ioc_m.mem_writes;
+            out_metrics->residency_hits = ioc_m.residency_hits;
+            out_metrics->residency_misses = ioc_m.residency_misses;
+            out_metrics->fallback_count = g_fallback_count;
+            out_metrics->offload_count = g_offload_count;
+            out_metrics->pool_used = ioc_m.pool_used;
+            out_metrics->pool_total = ioc_m.pool_total;
+            return;
+        }
     }
+
+    fabric_metrics_t m;
+    emu_fabric_get_metrics_id(g_last_dispatched_fid, &m);
+    m.fallback_count = g_fallback_count;
+    m.offload_count = g_offload_count;
+    *out_metrics = m;
 }
 
 static int should_offload_adaptive(orch_task_t* task) {
@@ -398,6 +425,14 @@ static void cpu_fallback_gemv(orch_task_t* task) {
 
     free(w_trits);
     free(i_trits);
+}
+
+static int estimate_task_cost(orch_task_t* task, int node_id) {
+    float sparsity = g_avg_sparsity_ema;
+    int lanes = 60;
+    int comm_penalty = (node_id != g_this_node_id) ? 5000 : 0;
+    long active_ops = (long)(task->r * task->c * (1.0f - sparsity));
+    return (int)(active_ops / lanes) + comm_penalty;
 }
 
 static void ensure_resident(void* ptr, int best_fid) {

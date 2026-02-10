@@ -38,7 +38,9 @@ Welcome to the **Ternary Fabric** user manual. This documentation is designed to
     Phase 20 documentation on adaptive cost modeling and scheduler weighting.
 17. **[Predictive Multi-Fabric Orchestration](docs/21_MULTI_FABRIC_ORCHESTRATION.md)**
     Phase 21 documentation on global orchestration and predictive scheduling.
-18. **[Strategy Roadmap](docs/ROADMAP.md)**
+18. [Adaptive Runtime & Physical Hardware](docs/26_ADAPTIVE_HARDWARE.md)
+    Phase 26 documentation on adaptive offloading and FPGA hardware bring-up.
+19. [Strategy Roadmap](docs/ROADMAP.md)
     The project roadmap detailing completed and future phases.
 19. **[Benchmarks & Metrics](BENCHMARKS.md)**
     Authoritative record for performance, resources, and economic metrics.
@@ -60,6 +62,8 @@ The easiest way to run an application with Fabric acceleration is using the `tfm
 *   `TFMBS_DEBUG=1`: Enables detailed real-time logging of memory registry changes, GEMV offloads, and async waits.
 *   `TFMBS_VALIDATE=1`: Bit-exact comparison of Fabric results against a CPU reference for every operation.
 *   `TFMBS_NUM_FABRICS=n`: Configures the number of independent **Fabric Instances** (Phase 21).
+*   `TFMBS_ADAPTIVE_POLICY=sparsity`: Enables real-time adaptive offloading based on sparsity (Phase 26).
+*   `FABRIC_HARDWARE_PATH=1`: Enables physical FPGA communication via `/dev/tfmbs` (Phase 26).
 
 ---
 
@@ -108,6 +112,19 @@ Each fabric manages a three-stage asynchronous pipeline:
 3.  **Commit:** Finalizes results and signals task completion.
 
 The pipeline depth automatically adjusts based on workload density—extending for throughput on dense kernels and shortening for low latency on sparse workloads.
+
+## ⚡ Adaptive Runtime & Physical Hardware (Phase 26)
+
+Phase 26 introduces dynamic adaptability and the first wave of physical hardware bring-up for the XC7Z020 target.
+
+### Adaptive Offloading (CPU Fallback)
+The runtime now monitors the real-time **Sparsity EMA** (Exponential Moving Average). If the workload's sparsity drops below a configurable threshold (making the Fabric's zero-skip advantage less effective), the system can automatically fallback to optimized CPU kernels for that layer, periodically probing the Fabric to detect sparsity shifts.
+
+### Physical FPGA Path
+Support for real hardware is now integrated into the driver layer. By setting `FABRIC_HARDWARE_PATH=1`, the system transitions from the emulator to a physical Zynq-7000 FPGA backend using the `/dev/tfmbs` device interface.
+
+### Enhanced RDMA Stubs
+Multi-node orchestration now utilizes an enhanced socket-based simulation that mimics RDMA **Queue Pairs (QP)** and **Completion Queues (CQ)**, providing a more stable path for future RoCE/ibverbs porting.
 
 ---
 

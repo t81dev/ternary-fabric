@@ -81,6 +81,8 @@ def main() -> int:
                         help="MLIR file with compiler telemetry.")
     parser.add_argument("--runtime", type=Path, default=Path("logs/adaptive_history.json"),
                         help="Runtime telemetry history produced by AdaptiveRuntimeAgent.")
+    parser.add_argument("--hw-runtime", type=Path,
+                        help="Physical hardware telemetry history log for comparison.")
     parser.add_argument("--no-clash", action="store_true",
                         help="Skip comparison when runtime data is missing.")
     args = parser.parse_args()
@@ -97,8 +99,18 @@ def main() -> int:
 
     print(f"Compile fusion order(s): {[entry.get('fusion_order') for entry in compile_hints]}")
     if runtime_entries:
+        print("\n--- Simulation Runtime Analysis ---")
         compare_entries(compile_hints, runtime_entries)
-    else:
+
+    if args.hw_runtime and args.hw_runtime.is_file():
+        agent_cls = load_adaptive_runtime_agent_class()
+        hw_entries = agent_cls.load_history(args.hw_runtime)
+        print("\n--- Physical Hardware Analysis ---")
+        compare_entries(compile_hints, hw_entries)
+    elif args.hw_runtime:
+        print(f"HW runtime log not found: {args.hw_runtime}")
+
+    if not runtime_entries and not args.hw_runtime:
         print("Runtime telemetry log not provided; run AdaptiveRuntimeAgent.save_history() to generate it.")
     return 0
 
